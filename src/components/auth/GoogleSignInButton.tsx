@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
+import { getAuthCallbackUrl } from "@/lib/supabase/site-url";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -53,7 +54,7 @@ export function GoogleSignInButton() {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          redirectTo: getAuthCallbackUrl("/dashboard"),
           queryParams: {
             prompt: "select_account",
           },
