@@ -15,6 +15,27 @@
       "when": 1778494878196,
       "tag": "0001_set_updated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778502000000,
+      "tag": "0002_supabase_auth_user_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778498738779,
+      "tag": "0003_football_match_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778498884497,
+      "tag": "0004_match_fouls",
+      "breakpoints": true
     }
   ]
 }

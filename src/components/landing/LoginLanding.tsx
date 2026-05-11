@@ -62,9 +62,8 @@ export function LoginLanding() {
               />
               <div className="text-center">
                 <p className="text-foreground-muted max-w-[26rem] text-sm leading-relaxed">
-                  Una plataforma moderna para comunidades competitivas:
-                  brackets, temporadas, equipos y aficionados en un mismo
-                  ecosistema.
+                  Tornea es tu espacio para armar ligas y torneos: equipos,
+                  calendario y resultados en un solo panel.
                 </p>
               </div>
             </div>

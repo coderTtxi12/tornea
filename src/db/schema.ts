@@ -84,6 +84,61 @@ export const sanctionStatusEnum = pgEnum("sanction_status", [
   "revoked",
 ]);
 
+/** In-game goal classification (football-first; other sports can add values later). */
+export const footballGoalKindEnum = pgEnum("football_goal_kind", [
+  "open_play",
+  "penalty_kick",
+  "direct_free_kick",
+  "indirect_free_kick",
+  "corner",
+  "header",
+  "other",
+]);
+
+export const footballCardKindEnum = pgEnum("football_card_kind", [
+  "yellow",
+  "red",
+  "second_yellow",
+]);
+
+export const footballPeriodEnum = pgEnum("football_period", [
+  "first_half",
+  "second_half",
+  "extra_first",
+  "extra_second",
+  "penalty_shootout",
+]);
+
+/** Result of a penalty kick taken during open play / extra time (not shootout rounds). */
+export const footballPenaltyAttemptOutcomeEnum = pgEnum(
+  "football_penalty_attempt_outcome",
+  ["scored", "saved", "missed", "off_target", "disallowed"],
+);
+
+export const lineupSlotEnum = pgEnum("lineup_slot", ["starter", "bench"]);
+
+export const matchReportKindEnum = pgEnum("match_report_kind", [
+  "delegate",
+  "referee",
+  "press",
+  "internal",
+]);
+
+/** Faltas / conducta en juego (p. ej. patada, entrada peligrosa). Distinto de la tarjeta en sí. */
+export const footballFoulKindEnum = pgEnum("football_foul_kind", [
+  "violent_conduct",
+  "serious_foul_play",
+  "reckless_tackle",
+  "careless_foul",
+  "dissent",
+  "unsporting_behavior",
+  "handball",
+  "offside",
+  "simulation",
+  "other",
+]);
+
+
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
@@ -92,7 +147,7 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    firebaseUid: text("firebase_uid").notNull().unique(),
+    authUserId: uuid("auth_user_id").notNull().unique(), // Supabase auth.users.id
     email: text("email").notNull(),
     displayName: text("display_name"),
     avatarUrl: text("avatar_url"),
@@ -300,6 +355,7 @@ export const players = pgTable(
     fullName: text("full_name").notNull(),
     docId: text("doc_id"),
     birthDate: date("birth_date"),
+    metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -388,9 +444,16 @@ export const matches = pgTable(
     awayTeamId: uuid("away_team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "restrict" }),
+    sportCode: text("sport_code").notNull().default("football"),
     status: matchStatusEnum("status").notNull().default("scheduled"),
     homeScore: integer("home_score"),
     awayScore: integer("away_score"),
+    /** Reloj real: salida del balón / fin del partido (opcional). */
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    /** Duración reglamentaria acordada (p. ej. 90 en fútbol 11). */
+    regulationMinutes: integer("regulation_minutes").default(90),
+    attendance: integer("attendance"),
     notes: text("notes"),
     report: jsonb("report").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -429,8 +492,13 @@ export const matchGoals = pgTable(
     assistPlayerId: uuid("assist_player_id").references(() => players.id, {
       onDelete: "set null",
     }),
+    sportCode: text("sport_code").notNull().default("football"),
+    goalKind: footballGoalKindEnum("goal_kind"),
+    period: footballPeriodEnum("period"),
     minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
     isOwnGoal: boolean("is_own_goal").notNull().default(false),
+    metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -462,6 +530,267 @@ export const matchOfficials = pgTable(
     ),
     index("match_officials_match_id_idx").on(t.matchId),
     index("match_officials_user_id_idx").on(t.userId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Football-first match detail (extensible via sport_code + metadata elsewhere)
+// ---------------------------------------------------------------------------
+
+/** Titular / suplente por partido (snapshot; puede diferir del roster de temporada). */
+export const matchLineups = pgTable(
+  "match_lineups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    sportCode: text("sport_code").notNull().default("football"),
+    slot: lineupSlotEnum("slot").notNull(),
+    /** Ej. GK, CB, ST — libre para i18n / otros deportes. */
+    positionCode: text("position_code"),
+    shirtNumber: integer("shirt_number"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("match_lineups_match_team_player_unique").on(
+      t.matchId,
+      t.teamId,
+      t.playerId,
+    ),
+    index("match_lineups_match_id_idx").on(t.matchId),
+    index("match_lineups_team_id_idx").on(t.teamId),
+  ],
+);
+
+export const matchCards = pgTable(
+  "match_cards",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    sportCode: text("sport_code").notNull().default("football"),
+    cardKind: footballCardKindEnum("card_kind").notNull(),
+    period: footballPeriodEnum("period"),
+    minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
+    reason: text("reason"),
+    recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("match_cards_match_id_idx").on(t.matchId),
+    index("match_cards_team_id_idx").on(t.teamId),
+    index("match_cards_player_id_idx").on(t.playerId),
+  ],
+);
+
+export const matchSubstitutions = pgTable(
+  "match_substitutions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerOutId: uuid("player_out_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    playerInId: uuid("player_in_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    sportCode: text("sport_code").notNull().default("football"),
+    period: footballPeriodEnum("period"),
+    minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
+    reason: text("reason"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "match_substitutions_distinct_players",
+      sql`${t.playerOutId} <> ${t.playerInId}`,
+    ),
+    index("match_substitutions_match_id_idx").on(t.matchId),
+    index("match_substitutions_team_id_idx").on(t.teamId),
+  ],
+);
+
+/** Penal máximo reglamentario (no la tanda de penales). Si convirtió, enlazar `matchGoalId`. */
+export const matchPenaltyAttempts = pgTable(
+  "match_penalty_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    takerId: uuid("taker_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    goalkeeperId: uuid("goalkeeper_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    sportCode: text("sport_code").notNull().default("football"),
+    outcome: footballPenaltyAttemptOutcomeEnum("outcome").notNull(),
+    period: footballPeriodEnum("period"),
+    minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
+    matchGoalId: uuid("match_goal_id").references(() => matchGoals.id, {
+      onDelete: "set null",
+    }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("match_penalty_attempts_match_id_idx").on(t.matchId),
+    index("match_penalty_attempts_team_id_idx").on(t.teamId),
+  ],
+);
+
+/** Tanda de penales (ej. copas). */
+export const penaltyShootouts = pgTable(
+  "penalty_shootouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    sportCode: text("sport_code").notNull().default("football"),
+    /** Marcador final de la tanda (opcional; se puede calcular desde kicks). */
+    homeHits: integer("home_hits").notNull().default(0),
+    awayHits: integer("away_hits").notNull().default(0),
+    winnerTeamId: uuid("winner_team_id").references(() => teams.id, {
+      onDelete: "set null",
+    }),
+    settings: jsonb("settings").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("penalty_shootouts_match_unique").on(t.matchId),
+    index("penalty_shootouts_match_id_idx").on(t.matchId),
+  ],
+);
+
+export const penaltyShootoutKicks = pgTable(
+  "penalty_shootout_kicks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shootoutId: uuid("shootout_id")
+      .notNull()
+      .references(() => penaltyShootouts.id, { onDelete: "cascade" }),
+    sequenceIndex: integer("sequence_index").notNull(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    takerId: uuid("taker_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    goalkeeperId: uuid("goalkeeper_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    sportCode: text("sport_code").notNull().default("football"),
+    scored: boolean("scored").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("penalty_shootout_kicks_order_unique").on(
+      t.shootoutId,
+      t.sequenceIndex,
+    ),
+    index("penalty_shootout_kicks_shootout_id_idx").on(t.shootoutId),
+  ],
+);
+
+/** Actas / informes de partido (texto libre + metadatos). */
+export const matchReportSubmissions = pgTable(
+  "match_report_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    kind: matchReportKindEnum("kind").notNull().default("internal"),
+    title: text("title"),
+    body: text("body"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("match_report_submissions_match_id_idx").on(t.matchId)],
+);
+
+/**
+ * Eventos genéricos por deporte (VAR, lesión, interrupción, etc.) sin tablas dedicadas aún.
+ * `event_key` convención: football.var_review, basketball.timeout...
+ */
+export const sportMatchEvents = pgTable(
+  "sport_match_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    sportCode: text("sport_code").notNull().default("football"),
+    eventKey: text("event_key").notNull(),
+    minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
+    period: footballPeriodEnum("period"),
+    payload: jsonb("payload").notNull().default({}),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sport_match_events_match_id_idx").on(t.matchId),
+    index("sport_match_events_sport_key_idx").on(t.sportCode, t.eventKey),
   ],
 );
 
@@ -507,6 +836,57 @@ export const sanctions = pgTable(
     index("sanctions_league_id_idx").on(t.leagueId),
     index("sanctions_player_id_idx").on(t.playerId),
     index("sanctions_team_id_idx").on(t.teamId),
+  ],
+);
+
+/**
+ * Faltas e incidencias (agresiones, patadas, conducta violenta).
+ * La tarjeta mostrada en el acta va en `match_cards`; aquí enlazas con `matchCardId` si aplica.
+ * La sanción del comité disciplinario de la liga va en `sanctions`; enlaza con `leagueSanctionId` si aplica después del partido.
+ */
+export const matchFouls = pgTable(
+  "match_fouls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    matchId: uuid("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    offendingTeamId: uuid("offending_team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    offendingPlayerId: uuid("offending_player_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    victimPlayerId: uuid("victim_player_id").references(() => players.id, {
+      onDelete: "set null",
+    }),
+    sportCode: text("sport_code").notNull().default("football"),
+    foulKind: footballFoulKindEnum("foul_kind").notNull(),
+    period: footballPeriodEnum("period"),
+    minute: integer("minute"),
+    stoppageMinute: integer("stoppage_minute"),
+    description: text("description"),
+    advantagePlayed: boolean("advantage_played").notNull().default(false),
+    refereeDecision: text("referee_decision"),
+    matchCardId: uuid("match_card_id").references(() => matchCards.id, {
+      onDelete: "set null",
+    }),
+    leagueSanctionId: uuid("league_sanction_id").references(() => sanctions.id, {
+      onDelete: "set null",
+    }),
+    recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("match_fouls_match_id_idx").on(t.matchId),
+    index("match_fouls_offending_player_id_idx").on(t.offendingPlayerId),
+    index("match_fouls_victim_player_id_idx").on(t.victimPlayerId),
+    index("match_fouls_league_sanction_id_idx").on(t.leagueSanctionId),
   ],
 );
 
