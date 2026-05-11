@@ -1,10 +1,8 @@
 "use client";
 
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
+import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -36,35 +34,38 @@ function GoogleGlyph({ className }: { className?: string }) {
 }
 
 export function GoogleSignInButton() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function handleSignIn() {
     setError(null);
 
-    if (!isFirebaseConfigured()) {
+    if (!isSupabaseAuthConfigured()) {
       setError(
-        "Firebase env vars missing. Copy .env.example keys into .env.development.local.",
+        "Faltan las variables NEXT_PUBLIC_SUPABASE_* en .env / .env.local.",
       );
       return;
     }
 
     setPending(true);
     try {
-      const auth = getFirebaseAuth();
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(auth, provider);
-      router.replace("/dashboard");
-    } catch (e) {
-      const code = typeof e === "object" && e && "code" in e ? String((e as { code?: string }).code) : "";
-      if (code === "auth/popup-closed-by-user") {
-        setError(null);
-      } else {
-        setError(e instanceof Error ? e.message : "Google sign-in failed.");
+      const supabase = createClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+      if (oauthError) {
+        setError(oauthError.message);
+        setPending(false);
       }
-    } finally {
+      /* Si no hay error, el navegador redirige a Google. */
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo iniciar Google.");
       setPending(false);
     }
   }

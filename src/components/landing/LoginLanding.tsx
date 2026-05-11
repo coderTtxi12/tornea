@@ -73,10 +73,17 @@ export function LoginLanding() {
 
             {!configured && process.env.NODE_ENV === "development" ? (
               <p className="text-foreground-muted max-w-xs text-center text-[0.6875rem] leading-relaxed opacity-90">
-                Activa Firebase: copia las claves de tu app web desde la
-                consola de Firebase en{" "}
+                Activa Supabase: añade{" "}
                 <code className="text-foreground rounded-brand-sm bg-surface-code px-1 py-0.5 font-mono text-[0.625rem]">
-                  .env.development.local
+                  NEXT_PUBLIC_SUPABASE_URL
+                </code>{" "}
+                y{" "}
+                <code className="text-foreground rounded-brand-sm bg-surface-code px-1 py-0.5 font-mono text-[0.625rem]">
+                  NEXT_PUBLIC_SUPABASE_ANON_KEY
+                </code>{" "}
+                (Project settings → API) en{" "}
+                <code className="text-foreground rounded-brand-sm bg-surface-code px-1 py-0.5 font-mono text-[0.625rem]">
+                  .env.local
                 </code>
               </p>
             ) : null}

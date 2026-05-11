@@ -1,5 +1,6 @@
 "use client";
 
+import type { Session, User } from "@supabase/supabase-js";
 import {
   createContext,
   useContext,
@@ -8,12 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
 
-import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase/client";
+import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 
 type AuthContextValue = {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   configured: boolean;
 };
@@ -21,9 +22,9 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const configured = useMemo(() => isFirebaseConfigured(), []);
+  const configured = useMemo(() => isSupabaseAuthConfigured(), []);
 
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(configured);
 
   useEffect(() => {
@@ -31,18 +32,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const auth = getFirebaseAuth();
-    const unsub = onAuthStateChanged(auth, (next) => {
-      setUser(next);
+    const supabase = createClient();
+
+    void supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
       setLoading(false);
     });
 
-    return () => unsub();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, [configured]);
 
-  const value = useMemo(
-    () => ({ user, loading, configured }),
-    [user, loading, configured],
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user: session?.user ?? null,
+      session,
+      loading,
+      configured,
+    }),
+    [session, loading, configured],
   );
 
   return (

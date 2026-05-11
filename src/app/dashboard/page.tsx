@@ -1,15 +1,15 @@
 "use client";
 
-import { signOut } from "firebase/auth";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/providers/AuthProvider";
+import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 import {
-  getFirebaseAuth,
-  isFirebaseConfigured,
-} from "@/lib/firebase/client";
+  getAvatarUrl,
+  getDisplayName,
+} from "@/lib/supabase/user-display";
 
 export default function DashboardPage() {
   const { user, loading, configured } = useAuth();
@@ -23,10 +23,11 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   async function handleSignOut() {
-    if (!isFirebaseConfigured()) return;
+    if (!isSupabaseAuthConfigured()) return;
     setSigningOut(true);
     try {
-      await signOut(getFirebaseAuth());
+      const supabase = createClient();
+      await supabase.auth.signOut();
       router.replace("/");
     } finally {
       setSigningOut(false);
@@ -45,11 +46,8 @@ export default function DashboardPage() {
     );
   }
 
-  const photo = user.photoURL;
-  const name =
-    user.displayName ??
-    user.providerData.find((p) => p.displayName)?.displayName ??
-    "Player";
+  const name = getDisplayName(user);
+  const photo = getAvatarUrl(user);
 
   return (
     <div className="bg-background text-foreground min-h-dvh px-5 py-12 sm:px-10">
@@ -70,11 +68,13 @@ export default function DashboardPage() {
           )}
           <div className="min-w-0">
             <p className="text-foreground-muted text-sm font-medium uppercase tracking-wide">
-              Signed in
+              Sesión iniciada
             </p>
             <p className="truncate text-lg font-semibold">{name}</p>
             {user.email ? (
-              <p className="text-foreground-muted truncate text-sm">{user.email}</p>
+              <p className="text-foreground-muted truncate text-sm">
+                {user.email}
+              </p>
             ) : null}
           </div>
         </div>
@@ -93,7 +93,7 @@ export default function DashboardPage() {
           disabled={signingOut || !configured}
           className="border-border hover:bg-surface-code rounded-brand-lg border px-4 py-3 text-sm font-semibold transition disabled:opacity-50"
         >
-          {signingOut ? "Signing out…" : "Sign out"}
+          {signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
         </button>
       </div>
     </div>
