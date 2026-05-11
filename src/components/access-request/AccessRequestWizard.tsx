@@ -206,10 +206,10 @@ export function AccessRequestWizard({
         {step === 0 && (
           <section className="space-y-4">
             <h1 className="text-2xl font-bold tracking-tight">
-              ¿Cómo te llamamos?
+              ¿Cuál es tu nombre?
             </h1>
             <p className="text-foreground-muted text-sm leading-relaxed">
-              Queremos saber con quién hablamos cuando revisemos tu solicitud.
+              Así vinculamos tu solicitud contigo cuando la revisemos.
             </p>
             <input
               type="text"
