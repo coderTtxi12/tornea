@@ -10,11 +10,13 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.cjs",
+    "db:seed:dashboard-user": "node scripts/seed-dashboard-access-user.cjs",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "country-telephone-data": "^0.6.3",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.6",
     "pg": "^8.20.0",

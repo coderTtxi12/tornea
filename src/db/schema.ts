@@ -152,6 +152,10 @@ export const users = pgTable(
     displayName: text("display_name"),
     avatarUrl: text("avatar_url"),
     phone: text("phone"),
+    /** When set, the user may open the product dashboard (invite-only). */
+    dashboardAccessGrantedAt: timestamp("dashboard_access_granted_at", {
+      withTimezone: true,
+    }),
     locale: text("locale").notNull().default("es"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -161,6 +165,38 @@ export const users = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)],
+);
+
+/**
+ * Lead / waitlist submissions from users without dashboard access.
+ * Reviewed by Tornea operators before granting {@link users.dashboardAccessGrantedAt}.
+ */
+export const dashboardAccessRequests = pgTable(
+  "dashboard_access_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contactFullName: text("contact_full_name").notNull(),
+    /** WhatsApp or mobile, ideally E.164 (e.g. +52…). */
+    whatsappNumber: text("whatsapp_number").notNull(),
+    leaguesManagedCount: integer("leagues_managed_count").notNull(),
+    tournamentsSummary: text("tournaments_summary").notNull(),
+    organizationName: text("organization_name"),
+    cityOrRegion: text("city_or_region"),
+    referralSource: text("referral_source"),
+    /** Estimated active players / athletes (optional sizing hint). */
+    approximatePlayersCount: integer("approximate_players_count"),
+    extraNotes: text("extra_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("dashboard_access_requests_user_id_idx").on(t.userId),
+    index("dashboard_access_requests_created_at_idx").on(t.createdAt),
+  ],
 );
 
 export const leagues = pgTable(
@@ -939,7 +975,18 @@ export const prizeDraws = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   ownedLeagues: many(leagues),
   leagueMemberships: many(leagueMembers),
+  dashboardAccessRequests: many(dashboardAccessRequests),
 }));
+
+export const dashboardAccessRequestsRelations = relations(
+  dashboardAccessRequests,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [dashboardAccessRequests.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const leaguesRelations = relations(leagues, ({ one, many }) => ({
   owner: one(users, {

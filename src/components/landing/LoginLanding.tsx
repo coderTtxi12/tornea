@@ -13,7 +13,24 @@ export function LoginLanding() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/dashboard");
+      let cancelled = false;
+      void (async () => {
+        try {
+          const r = await fetch("/api/auth/dashboard-access");
+          if (cancelled) return;
+          if (r.status === 401) {
+            router.replace("/");
+            return;
+          }
+          const data = (await r.json()) as { allowed?: boolean };
+          router.replace(data.allowed ? "/dashboard" : "/solicitar-acceso");
+        } catch {
+          if (!cancelled) router.replace("/");
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [user, loading, router]);
 
