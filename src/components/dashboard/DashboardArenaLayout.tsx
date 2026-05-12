@@ -24,6 +24,7 @@ export type DashboardArenaLayoutProps = {
   signingOut: boolean;
   authConfigured: boolean;
   myLeagues: DashboardMyLeaguesState;
+  onLeagueCreated?: () => void;
 };
 
 function IconSettings({ className }: { className?: string }) {
@@ -112,6 +113,7 @@ export function DashboardArenaLayout({
   signingOut,
   authConfigured,
   myLeagues,
+  onLeagueCreated,
 }: DashboardArenaLayoutProps) {
   const [nav, setNav] = useState<DashboardNavKey>("home");
   const searchShortcutOs = useSearchShortcutOs();
@@ -204,7 +206,7 @@ export function DashboardArenaLayout({
                   onRetry={myLeagues.onRetry}
                 />
               ) : !hasLeagues ? (
-                <DashboardEmptyLeaguesPanel />
+                <DashboardEmptyLeaguesPanel onLeagueCreated={onLeagueCreated} />
               ) : (
                 <DashboardViewSwitch nav={nav} />
               )}

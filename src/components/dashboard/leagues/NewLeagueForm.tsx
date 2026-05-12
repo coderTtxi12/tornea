@@ -18,9 +18,12 @@ import { newLeagueTextFieldsSchema } from "./new-league-form-schema";
 type NewLeagueFormProps = {
   /** Vuelve al panel inicial (hero). */
   onCancel: () => void;
+  /** Tras crear la liga correctamente (refetch del dashboard). */
+  onLeagueCreated?: () => void;
 };
 
-export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
+export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps) {
+  const idempotencyKeyRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const countryDialOptions = useMemo(() => getCountryDialOptions(), []);
 
@@ -31,23 +34,23 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
   const [contactEmail, setContactEmail] = useState("");
   const [organizationAddress, setOrganizationAddress] = useState("");
   const [shield, setShield] = useState<File | null>(null);
-  const [shieldPreviewUrl, setShieldPreviewUrl] = useState<string | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [shieldError, setShieldError] = useState<string | null>(null);
-  const [designSuccess, setDesignSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const shieldPreviewUrl = useMemo(() => {
+    if (!shield) return null;
+    return URL.createObjectURL(shield);
+  }, [shield]);
 
   useEffect(() => {
-    if (shield) {
-      const url = URL.createObjectURL(shield);
-      setShieldPreviewUrl(url);
-      return () => {
-        URL.revokeObjectURL(url);
-      };
-    }
-    setShieldPreviewUrl(null);
-    return undefined;
-  }, [shield]);
+    if (!shieldPreviewUrl) return undefined;
+    return () => {
+      URL.revokeObjectURL(shieldPreviewUrl);
+    };
+  }, [shieldPreviewUrl]);
 
   function resetForm() {
     setLeagueName("");
@@ -59,7 +62,7 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
     setShield(null);
     setFieldErrors({});
     setShieldError(null);
-    setDesignSuccess(false);
+    setSubmitError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -84,10 +87,11 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
     setShield(file);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
     setShieldError(null);
+    setSubmitError(null);
 
     const parsed = newLeagueTextFieldsSchema.safeParse({
       leagueName,
@@ -110,8 +114,64 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
       return;
     }
 
-    void parsed.data;
-    setDesignSuccess(true);
+    setSubmitting(true);
+    try {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      const fd = new FormData();
+      fd.set("leagueName", parsed.data.leagueName);
+      fd.set("contactName", parsed.data.contactName);
+      fd.set("contactCountryIso", parsed.data.contactCountryIso);
+      fd.set("contactPhoneNational", parsed.data.contactPhoneNational);
+      fd.set("contactEmail", parsed.data.contactEmail);
+      fd.set("organizationAddress", parsed.data.organizationAddress);
+      if (shield) {
+        fd.set("shield", shield);
+      }
+
+      const res = await fetch("/api/leagues", {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKeyRef.current },
+        body: fd,
+      });
+
+      let data: {
+        error?: string;
+        fields?: Record<string, string>;
+        league?: unknown;
+      } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (res.status === 401) {
+        window.location.href = "/";
+        return;
+      }
+
+      if (!res.ok) {
+        if (data.fields && typeof data.fields === "object") {
+          setFieldErrors(data.fields);
+        }
+        setSubmitError(
+          typeof data.error === "string" ? data.error : "No se pudo crear la liga. Intenta de nuevo.",
+        );
+        return;
+      }
+
+      onLeagueCreated?.();
+      resetForm();
+      onCancel();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleBack() {
@@ -124,15 +184,15 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
       <div className="mb-6">
         <h2 className="text-xl font-bold tracking-tight">Nueva liga</h2>
         <p className="text-foreground-muted mt-1 text-sm leading-relaxed">
-          Completa los datos. Aún no se guardan en la base; sirve para validar el diseño.
+          Los datos se guardan en tu cuenta. Puedes repetir el envío con seguridad: si la red falla, no
+          se duplica la liga.
         </p>
       </div>
 
       <form className="flex flex-col" onSubmit={handleSubmit}>
-        {designSuccess ? (
-          <div className="border-border bg-brand-lime/15 text-brand-navy mb-6 rounded-brand-md border px-3 py-2.5 text-sm">
-            Validación correcta. Cuando integremos el backend, esta liga se creará en la base de
-            datos.
+        {submitError ? (
+          <div className="border-border bg-brand-purple/15 text-brand-navy mb-6 rounded-brand-md border px-3 py-2.5 text-sm">
+            {submitError}
           </div>
         ) : null}
 
@@ -158,6 +218,7 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
             ref={fileInputRef}
             type="file"
             accept={LEAGUE_SHIELD_ACCEPT_ATTR}
+            disabled={submitting}
             className="border-border bg-background-muted/30 mt-1 w-full cursor-pointer rounded-brand-md border border-dashed px-2 py-2 text-xs file:mr-2 file:rounded-md file:border-0 file:bg-brand-blue file:px-2 file:py-1 file:text-xs file:text-white"
             onChange={(e) => onShieldChange(e.target.files?.[0] ?? null)}
           />
@@ -197,7 +258,7 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
         <div className="mt-4">
           <span className="text-foreground-muted text-xs font-medium">Celular del contacto</span>
           <p className="text-foreground-subtle mt-0.5 text-[11px] leading-snug">
-            Elegí el país y escribí solo el número local (igual que en la solicitud de acceso).
+            Elige el país y escribe solo el número local (igual que en la solicitud de acceso).
           </p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-stretch">
             <label className="sr-only" htmlFor="new-league-phone-country">
@@ -316,16 +377,18 @@ export function NewLeagueForm({ onCancel }: NewLeagueFormProps) {
         <div className="border-border mt-8 flex flex-wrap gap-3 border-t pt-6">
           <button
             type="button"
-            className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium"
+            className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
             onClick={handleBack}
+            disabled={submitting}
           >
             Volver
           </button>
           <button
             type="submit"
-            className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white"
+            className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            disabled={submitting}
           >
-            Validar diseño
+            {submitting ? "Creando…" : "Crear liga"}
           </button>
         </div>
       </form>

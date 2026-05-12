@@ -5,14 +5,21 @@ import { useState } from "react";
 import { floatCard } from "../views/dashboard-view-primitives";
 import { NewLeagueForm } from "./NewLeagueForm";
 
-export function DashboardEmptyLeaguesPanel() {
+export function DashboardEmptyLeaguesPanel({
+  onLeagueCreated,
+}: {
+  onLeagueCreated?: () => void;
+}) {
   const [step, setStep] = useState<"hero" | "form">("hero");
 
   if (step === "form") {
     return (
       <div className="flex flex-col items-stretch px-1 py-6 sm:px-2 lg:py-8">
         <div className={`${floatCard} mx-auto w-full max-w-2xl p-6 sm:p-8`}>
-          <NewLeagueForm onCancel={() => setStep("hero")} />
+          <NewLeagueForm
+            onCancel={() => setStep("hero")}
+            onLeagueCreated={onLeagueCreated}
+          />
         </div>
       </div>
     );
@@ -25,11 +32,11 @@ export function DashboardEmptyLeaguesPanel() {
           ⚽
         </div>
         <h1 className="mt-4 text-xl font-bold tracking-tight sm:text-2xl">
-          Aún no tenés ligas en Tornea
+          Aún no tienes ligas en Tornea
         </h1>
         <p className="text-foreground-muted mt-2 text-sm leading-relaxed">
-          Creá tu primera organización para armar temporadas, fixture y tablas. Los datos del
-          formulario son solo de prueba hasta que actives el guardado en base de datos.
+          Crea tu primera organización para armar temporadas, fixture y tablas. Completa el formulario
+          y la liga queda guardada en tu cuenta.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <button

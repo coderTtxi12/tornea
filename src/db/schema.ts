@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -258,6 +259,30 @@ export const leagueMembers = pgTable(
     unique("league_members_league_user_unique").on(t.leagueId, t.userId),
     index("league_members_league_id_idx").on(t.leagueId),
     index("league_members_user_id_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Dedup de creación de liga por usuario + Idempotency-Key (header de request).
+ * Evita duplicar `leagues` ante doble envío o reintentos de red.
+ */
+export const leagueCreateIdempotency = pgTable(
+  "league_create_idempotency",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.idempotencyKey] }),
+    index("league_create_idempotency_league_id_idx").on(t.leagueId),
   ],
 );
 

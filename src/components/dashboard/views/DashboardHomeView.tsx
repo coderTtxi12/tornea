@@ -62,7 +62,7 @@ export function DashboardHomeView() {
                 <p className="text-foreground-muted mt-2 max-w-md text-sm leading-relaxed">
                   {featured?.nextMatch
                     ? `${featured.nextMatch.homeTeam} vs ${featured.nextMatch.awayTeam} · ${featured.nextMatch.kickoffLabel} · ${featured.nextMatch.venueShort}`
-                    : "Armá fixture, rivales y estadísticas con energía Tornea."}
+                    : "Arma fixture, rivales y estadísticas con energía Tornea."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">

@@ -36,7 +36,7 @@ export const newLeagueTextFieldsSchema = z
     if (!national.length) {
       ctx.addIssue({
         code: "custom",
-        message: "Ingresá el número local (sin la lada del país).",
+        message: "Ingresa el número local (sin la lada del país).",
         path: ["contactPhoneNational"],
       });
       return;
@@ -47,7 +47,7 @@ export const newLeagueTextFieldsSchema = z
       if (!/^[0-9]{10}$/.test(national)) {
         ctx.addIssue({
           code: "custom",
-          message: "Para México usá 10 dígitos.",
+          message: "Para México usa 10 dígitos.",
           path: ["contactPhoneNational"],
         });
       }
@@ -57,7 +57,7 @@ export const newLeagueTextFieldsSchema = z
     if (national.length < 8 || national.length > 15) {
       ctx.addIssue({
         code: "custom",
-        message: "Revisá la longitud del número local (8–15 dígitos).",
+        message: "Revisa la longitud del número local (8–15 dígitos).",
         path: ["contactPhoneNational"],
       });
       return;

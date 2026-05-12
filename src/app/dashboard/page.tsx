@@ -121,6 +121,7 @@ export default function DashboardPage() {
       signingOut={signingOut}
       authConfigured={configured}
       myLeagues={myLeagues}
+      onLeagueCreated={() => setRefetchKey((k) => k + 1)}
     />
   );
 }
