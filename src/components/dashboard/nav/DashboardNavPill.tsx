@@ -11,9 +11,6 @@ import {
 
 import { DASHBOARD_NAV_ITEMS, type DashboardNavKey } from "./dashboard-nav-config";
 
-const pillShadow =
-  "shadow-[0_12px_40px_-8px_color-mix(in_srgb,var(--tornea-blue)_55%,transparent)]";
-
 function MaterialGlyph({
   name,
   active,
@@ -190,7 +187,7 @@ function SidebarPill({
   return (
     <div
       ref={pillRef}
-      className={`${pillShadow} flex max-h-[calc(100dvh-2rem)] w-[3.25rem] flex-col items-center justify-center overflow-hidden rounded-full bg-brand-blue sm:w-[3.45rem] sm:max-h-[calc(100dvh-2.5rem)]`}
+      className="flex max-h-[calc(100dvh-2rem)] w-[3.25rem] flex-col items-center justify-center overflow-hidden rounded-full bg-brand-blue sm:w-[3.45rem] sm:max-h-[calc(100dvh-2.5rem)]"
     >
       <DashboardNavRail
         ref={navRef}
@@ -227,9 +224,7 @@ type DashboardNavPillMobileProps = {
 export function DashboardNavPillMobile({ active, onNavigate }: DashboardNavPillMobileProps) {
   return (
     <div className="border-border flex justify-center border-b bg-background py-2.5 sm:hidden">
-      <div
-        className={`${pillShadow} rounded-full bg-brand-blue`}
-      >
+      <div className="rounded-full bg-brand-blue">
         <DashboardNavRail active={active} onNavigate={onNavigate} layout="horizontal" />
       </div>
     </div>
