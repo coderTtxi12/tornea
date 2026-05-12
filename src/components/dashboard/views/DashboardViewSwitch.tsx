@@ -2,6 +2,8 @@
 
 import type { DashboardNavKey } from "../nav";
 
+import type { MyLeaguesApiItem } from "../leagues/my-leagues-state";
+
 import { DashboardDisciplineView } from "./DashboardDisciplineView";
 import { DashboardFixtureView } from "./DashboardFixtureView";
 import { DashboardHomeView } from "./DashboardHomeView";
@@ -14,12 +16,18 @@ import { DashboardStandingsView } from "./DashboardStandingsView";
 import { DashboardTeamsView } from "./DashboardTeamsView";
 import { DashboardVenuesView } from "./DashboardVenuesView";
 
-export function DashboardViewSwitch({ nav }: { nav: DashboardNavKey }) {
+export function DashboardViewSwitch({
+  nav,
+  leagueOrgCards,
+}: {
+  nav: DashboardNavKey;
+  leagueOrgCards: readonly MyLeaguesApiItem[];
+}) {
   switch (nav) {
     case "home":
       return <DashboardHomeView />;
     case "leagues":
-      return <DashboardLeaguesView />;
+      return <DashboardLeaguesView leagues={leagueOrgCards} />;
     case "fixture":
       return <DashboardFixtureView />;
     case "live":

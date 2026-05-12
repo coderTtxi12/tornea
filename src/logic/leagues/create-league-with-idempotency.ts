@@ -6,11 +6,13 @@ import { and, eq, sql } from "drizzle-orm";
 import type { NewLeagueTextFields } from "@/components/dashboard/leagues/new-league-form-schema";
 import { getDb } from "@/db/client";
 import {
+  leagueCategories,
   leagueCreateIdempotency,
   leagueMembers,
   leagues,
 } from "@/db/schema";
 import { combineCountryDialAndNationalToE164 } from "@/logic/access-request/whatsapp";
+import type { LeagueCategoryGender } from "@/logic/leagues/league-category-presets";
 import { findDialOptionByIso2 } from "@/lib/phone/country-dial-options";
 
 export type CreatedLeagueSummary = {
@@ -18,6 +20,14 @@ export type CreatedLeagueSummary = {
   name: string;
   slug: string;
   status: string;
+};
+
+export type NewLeagueCategoryInput = {
+  code: string;
+  name: string;
+  gender: LeagueCategoryGender;
+  ageMin: number | null;
+  ageMax: number | null;
 };
 
 function advisoryLockKeyPair(scope: string): [number, number] {
@@ -57,14 +67,38 @@ function leagueSettingsJson(data: NewLeagueTextFields) {
   };
 }
 
+function normalizeCategoryInputs(
+  inputs: readonly NewLeagueCategoryInput[] | undefined,
+): NewLeagueCategoryInput[] {
+  if (!inputs?.length) return [];
+  const seen = new Set<string>();
+  const out: NewLeagueCategoryInput[] = [];
+  for (const c of inputs) {
+    const code = c.code.trim().toLowerCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    out.push({
+      code,
+      name: c.name.trim() || code,
+      gender: c.gender,
+      ageMin: c.ageMin,
+      ageMax: c.ageMax,
+    });
+  }
+  return out;
+}
+
 /**
  * Crea liga + fila `owner` en `league_members` y registra idempotencia en una transacción.
- * Reintentos con la misma clave devuelven la misma liga (`replay: true`).
+ * Opcionalmente crea categorías iniciales en `league_categories`.
+ * Reintentos con la misma clave devuelven la misma liga (`replay: true`) sin volver a
+ * insertar categorías.
  */
 export async function createLeagueWithIdempotency(
   appUserId: string,
   idempotencyKey: string,
   fields: NewLeagueTextFields,
+  initialCategories?: readonly NewLeagueCategoryInput[],
 ): Promise<{ replay: boolean; league: CreatedLeagueSummary }> {
   const db = getDb();
 
@@ -132,6 +166,21 @@ export async function createLeagueWithIdempotency(
       role: "owner",
       acceptedAt: new Date(),
     });
+
+    const categories = normalizeCategoryInputs(initialCategories);
+    if (categories.length > 0) {
+      await tx.insert(leagueCategories).values(
+        categories.map((c, index) => ({
+          leagueId: league.id,
+          code: c.code,
+          name: c.name,
+          gender: c.gender,
+          ageMin: c.ageMin,
+          ageMax: c.ageMax,
+          sortOrder: index,
+        })),
+      );
+    }
 
     await tx.insert(leagueCreateIdempotency).values({
       userId: appUserId,

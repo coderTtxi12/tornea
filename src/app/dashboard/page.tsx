@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DashboardArenaLayout } from "@/components/dashboard/DashboardArenaLayout";
-import type { DashboardMyLeaguesState } from "@/components/dashboard/leagues/my-leagues-state";
+import type {
+  DashboardMyLeaguesState,
+  MyLeaguesApiItem,
+} from "@/components/dashboard/leagues/my-leagues-state";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 import {
@@ -13,12 +16,7 @@ import {
 } from "@/lib/supabase/user-display";
 
 type LeaguesMyApiResponse = {
-  leagues: {
-    id: string;
-    name: string;
-    slug: string;
-    status: string;
-  }[];
+  leagues: MyLeaguesApiItem[];
 };
 
 export default function DashboardPage() {

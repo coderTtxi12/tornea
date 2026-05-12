@@ -6,14 +6,72 @@ import {
   LEAGUE_SHIELD_MIME_TYPES,
 } from "@/components/dashboard/leagues/league-shield-constraints";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
-import { createLeagueWithIdempotency } from "@/logic/leagues/create-league-with-idempotency";
+import {
+  createLeagueWithIdempotency,
+  type NewLeagueCategoryInput,
+} from "@/logic/leagues/create-league-with-idempotency";
 import { deleteLeagueById } from "@/logic/leagues/delete-league-by-id";
+import { findCategoryPresetByCode } from "@/logic/leagues/league-category-presets";
 import {
   leagueShieldStorageBucket,
   uploadLeagueShieldAndMergeBranding,
 } from "@/logic/leagues/upload-league-shield";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+
+/**
+ * Decodifica `categories` del FormData (JSON array de `{ code }` o equivalente preset).
+ * Aceptamos también un string CSV separado por comas para clientes simples.
+ */
+function readInitialCategories(form: FormData): NewLeagueCategoryInput[] {
+  const raw = form.get("categories");
+  if (raw == null) return [];
+
+  const candidates: string[] = [];
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed.length) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          for (const entry of parsed) {
+            if (typeof entry === "string") {
+              candidates.push(entry);
+            } else if (entry && typeof entry === "object") {
+              const code = (entry as { code?: unknown }).code;
+              if (typeof code === "string") candidates.push(code);
+            }
+          }
+        }
+      } catch {
+        return [];
+      }
+    } else {
+      for (const piece of trimmed.split(",")) {
+        candidates.push(piece);
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const out: NewLeagueCategoryInput[] = [];
+  for (const c of candidates) {
+    const code = c.trim().toLowerCase();
+    if (!code || seen.has(code)) continue;
+    const preset = findCategoryPresetByCode(code);
+    if (!preset) continue;
+    seen.add(code);
+    out.push({
+      code: preset.code,
+      name: preset.name,
+      gender: preset.gender,
+      ageMin: preset.ageMin,
+      ageMax: preset.ageMax,
+    });
+  }
+  return out;
+}
 
 function readIdempotencyKey(request: Request): string | null {
   const raw =
@@ -97,10 +155,13 @@ export async function POST(request: Request) {
       shieldContentType = ct;
     }
 
+    const initialCategories = readInitialCategories(form);
+
     const { replay, league } = await createLeagueWithIdempotency(
       appUser.id,
       idempotencyKey,
       parsedFields.data,
+      initialCategories,
     );
 
     const bucket = leagueShieldStorageBucket();

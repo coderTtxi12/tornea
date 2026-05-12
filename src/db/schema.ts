@@ -42,6 +42,14 @@ export const leagueMemberRoleEnum = pgEnum("league_member_role", [
   "viewer",
 ]);
 
+/** Género asociado a una categoría de liga (varonil/femenil/mixto/no especificado). */
+export const leagueCategoryGenderEnum = pgEnum("league_category_gender", [
+  "male",
+  "female",
+  "mixed",
+  "unspecified",
+]);
+
 export const seasonStatusEnum = pgEnum("season_status", [
   "scheduled",
   "in_progress",
@@ -263,6 +271,40 @@ export const leagueMembers = pgTable(
 );
 
 /**
+ * Categorías de competencia dentro de una liga (p. ej. Varonil, Femenil, Sub-15).
+ * Una categoría existe a nivel de liga y se referencia desde `season_teams` y `matches`.
+ */
+export const leagueCategories = pgTable(
+  "league_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    gender: leagueCategoryGenderEnum("gender").notNull().default("unspecified"),
+    ageMin: integer("age_min"),
+    ageMax: integer("age_max"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("league_categories_league_code_lower_idx").on(
+      t.leagueId,
+      sql`lower(${t.code})`,
+    ),
+    index("league_categories_league_id_idx").on(t.leagueId),
+  ],
+);
+
+/**
  * Dedup de creación de liga por usuario + Idempotency-Key (header de request).
  * Evita duplicar `leagues` ante doble envío o reintentos de red.
  */
@@ -378,6 +420,10 @@ export const seasonTeams = pgTable(
     teamId: uuid("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
+    leagueCategoryId: uuid("league_category_id").references(
+      () => leagueCategories.id,
+      { onDelete: "set null" },
+    ),
     division: text("division"),
     seed: integer("seed"),
     points: integer("points").notNull().default(0),
@@ -400,6 +446,7 @@ export const seasonTeams = pgTable(
     unique("season_teams_season_team_unique").on(t.seasonId, t.teamId),
     index("season_teams_season_id_idx").on(t.seasonId),
     index("season_teams_team_id_idx").on(t.teamId),
+    index("season_teams_league_category_id_idx").on(t.leagueCategoryId),
   ],
 );
 
@@ -492,6 +539,10 @@ export const matches = pgTable(
     seasonId: uuid("season_id")
       .notNull()
       .references(() => seasons.id, { onDelete: "cascade" }),
+    leagueCategoryId: uuid("league_category_id").references(
+      () => leagueCategories.id,
+      { onDelete: "set null" },
+    ),
     matchday: integer("matchday"),
     roundLabel: text("round_label"),
     venueId: uuid("venue_id").references(() => venues.id, {
@@ -534,6 +585,7 @@ export const matches = pgTable(
     index("matches_venue_id_idx").on(t.venueId),
     index("matches_home_team_id_idx").on(t.homeTeamId),
     index("matches_away_team_id_idx").on(t.awayTeamId),
+    index("matches_league_category_id_idx").on(t.leagueCategoryId),
   ],
 );
 

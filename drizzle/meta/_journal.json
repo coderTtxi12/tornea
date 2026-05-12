@@ -50,6 +50,13 @@
       "when": 1778576414150,
       "tag": "0006_lying_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778579010497,
+      "tag": "0007_lean_trish_tilby",
+      "breakpoints": true
     }
   ]
 }

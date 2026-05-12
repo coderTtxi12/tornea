@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
-import { listOwnedLeaguesForAppUserId } from "@/logic/leagues/list-owned-leagues";
+import { listOwnedLeaguesOrganizationCards } from "@/logic/leagues/list-owned-league-org-cards";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -19,7 +19,7 @@ export async function GET() {
     }
 
     const appUser = await syncAppUserFromSupabaseAuthUser(user);
-    const leagues = await listOwnedLeaguesForAppUserId(appUser.id);
+    const leagues = await listOwnedLeaguesOrganizationCards(appUser.id);
 
     return NextResponse.json({ leagues });
   } catch (e) {

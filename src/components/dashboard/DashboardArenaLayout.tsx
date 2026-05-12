@@ -208,7 +208,12 @@ export function DashboardArenaLayout({
               ) : !hasLeagues ? (
                 <DashboardEmptyLeaguesPanel onLeagueCreated={onLeagueCreated} />
               ) : (
-                <DashboardViewSwitch nav={nav} />
+                <DashboardViewSwitch
+                  nav={nav}
+                  leagueOrgCards={
+                    myLeagues.status === "ready" ? myLeagues.items : []
+                  }
+                />
               )}
             </div>
           </main>

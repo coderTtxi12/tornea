@@ -18,8 +18,10 @@ Complete reference for PostgreSQL (Drizzle ORM): **enums**, **tables**, **column
 ```mermaid
 flowchart TB
   users[users]
+  dashboard_access_requests[dashboard_access_requests]
   leagues[leagues]
   league_members[league_members]
+  league_create_idempotency[league_create_idempotency]
   seasons[seasons]
   teams[teams]
   season_teams[season_teams]
@@ -27,9 +29,12 @@ flowchart TB
   venues[venues]
   matches[matches]
 
+  users --> dashboard_access_requests
   users --> leagues
   users --> league_members
+  users --> league_create_idempotency
   leagues --> league_members
+  leagues --> league_create_idempotency
   leagues --> seasons
   leagues --> teams
   leagues --> venues
@@ -40,6 +45,10 @@ flowchart TB
   teams --> matches
   players --> team_rosters
 ```
+
+- **`dashboard_access_requests`:** solicitudes de acceso al panel (waitlist); ver columna `users.dashboard_access_granted_at`.
+- **`league_create_idempotency`:** deduplicación de creación de liga por usuario + clave de idempotencia HTTP (evita ligas duplicadas por doble envío).
+- **`league_categories`:** categorías de competencia dentro de una liga (varonil, femenil, sub-15, etc.); ver [League categories](#league-categories-varonil--femenil--sub-15--).
 
 - **`leagues`:** Top-level organization (“tenant” for a competition).
 - **`seasons`:** Competition edition under a league.
@@ -75,6 +84,34 @@ The DB does **not** guarantee that `leagues.owner_user_id` always matches a `lea
 2. Insert **`league_members`** for the same **`user_id`** with role **`owner`** (and **`accepted_at`** if you use invitations).
 
 Any “transfer of ownership” should update **both** or define a single canonical rule in product.
+
+### League create idempotency
+
+Table **`league_create_idempotency`** stores one row per **`(user_id, idempotency_key)`** pointing at the **`league_id`** created on first successful create. Replays with the same key must return the **same** league and must **not** insert another row (`ON DELETE CASCADE` from **`leagues`** removes this row if the league is deleted — e.g. compensating rollback when Storage fails after insert).
+
+Application code should serialize create attempts per key (e.g. `pg_advisory_xact_lock` in the same transaction as the insert) so concurrent requests do not race.
+
+---
+
+## League categories (varonil / femenil / sub-15 / …)
+
+Table **`league_categories`** models **competition categories that run in parallel** inside the same league (e.g. *Apertura 2026* with Varonil and Femenil running side by side). Categories are owned **per league** (`league_id`) and are reusable across seasons.
+
+Anchor points (both nullable for backwards compatibility — a category may not always apply):
+
+- **`season_teams.league_category_id`** → which category a team plays in within a season.
+- **`matches.league_category_id`** → which category a match belongs to.
+
+**Convention:**
+
+1. Define categories at the league level once.
+2. When enrolling a team into a season (`season_teams`), set its **`league_category_id`** if the season is multi-category.
+3. When scheduling a match (`matches`), set **`league_category_id`** (single source of truth for filtering calendars, standings, and discipline by category).
+4. The DB does **not** enforce that `matches.league_category_id` matches the category of the two `season_teams`. **App validation:** both teams must be enrolled in that season **and** in that category.
+
+`(league_id, lower(code))` is unique, so `code` (e.g. `varonil`, `femenil`, `sub_15`) is a stable key safe for URLs/UI.
+
+For mixed-gender or unisex categories, use **`gender = 'mixed'`** (a game/category where both genders play). Use **`'unspecified'`** when the league does not track gender. Age windows are open intervals via `age_min` / `age_max` (nullable means "no limit on that side").
 
 ---
 
@@ -154,6 +191,7 @@ With Supabase, you typically add **Row Level Security (RLS)** and policies keyed
 | `league_status` | `draft`, `active`, `archived` |
 | `league_billing_status` | `trial`, `active`, `past_due`, `cancelled` |
 | `league_member_role` | `owner`, `admin`, `staff`, `referee`, `team_staff`, `viewer` |
+| `league_category_gender` | `male`, `female`, `mixed`, `unspecified` |
 | `season_status` | `scheduled`, `in_progress`, `completed`, `cancelled` |
 | `season_format` | `round_robin`, `groups`, `knockout`, `mixed` |
 | `team_status` | `active`, `inactive`, `withdrawn` |
@@ -186,9 +224,31 @@ Application profile linked to Supabase Auth.
 | `display_name` | text | Display name. |
 | `avatar_url` | text | Profile image URL. |
 | `phone` | text | Phone number. |
+| `dashboard_access_granted_at` | timestamptz | When set, the user may use the product dashboard (invite-only). |
 | `locale` | text NOT NULL DEFAULT `es` | Locale preference. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
+
+### `dashboard_access_requests`
+
+Waitlist / intake for users requesting **dashboard access** (before `users.dashboard_access_granted_at` is set).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid PK | Row id. |
+| `user_id` | uuid FK → `users.id` | Submitter (cascade delete). |
+| `contact_full_name` | text NOT NULL | Contact name. |
+| `whatsapp_number` | text NOT NULL | WhatsApp / mobile (ideally E.164). |
+| `leagues_managed_count` | integer NOT NULL | Self-reported league count. |
+| `tournaments_summary` | text NOT NULL | Free-text tournament experience. |
+| `organization_name` | text | Optional org name. |
+| `city_or_region` | text | Optional location. |
+| `referral_source` | text | Optional attribution. |
+| `approximate_players_count` | integer | Optional sizing hint. |
+| `extra_notes` | text | Optional notes. |
+| `created_at` | timestamptz NOT NULL | Submission time. |
+
+Indexes: `user_id`, `created_at`.
 
 ### `leagues`
 
@@ -205,9 +265,9 @@ League / organization (tenant).
 | `timezone` | text NOT NULL DEFAULT `America/Guayaquil` | Default timezone for scheduling. |
 | `status` | `league_status` NOT NULL DEFAULT `draft` | Lifecycle. |
 | `billing_status` | `league_billing_status` NOT NULL DEFAULT `trial` | Billing state. |
-| `branding` | jsonb NOT NULL DEFAULT `{}` | Logos, colors, etc. |
+| `branding` | jsonb NOT NULL DEFAULT `{}` | Logos, colors, etc. **Convention (app):** optional **`shield`** object after upload to Storage: `bucket`, `path`, `publicUrl`, `contentType`. |
 | `rules` | jsonb NOT NULL DEFAULT `{}` | League rules payload. |
-| `settings` | jsonb NOT NULL DEFAULT `{}` | Feature flags and settings. |
+| `settings` | jsonb NOT NULL DEFAULT `{}` | Feature flags and settings. **Convention (app):** onboarding contact under **`contact`** (e.g. `fullName`, `email`, `whatsappE164`, `organizationAddress`, `whatsappCountryIso2`) until first-class columns exist. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
 
@@ -227,6 +287,39 @@ Membership and role per league.
 | `updated_at` | timestamptz NOT NULL | Last update. |
 
 Unique: (`league_id`, `user_id`).
+
+### `league_create_idempotency`
+
+Dedupes **league creation** per app user and HTTP idempotency key (see [League create idempotency](#league-create-idempotency)).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `user_id` | uuid FK → `users.id` | Creating user (cascade delete). PK part 1. |
+| `idempotency_key` | text NOT NULL | Opaque client key (e.g. UUID). PK part 2. |
+| `league_id` | uuid FK → `leagues.id` | League created on first success (cascade delete). |
+| `created_at` | timestamptz NOT NULL | When the mapping was stored. |
+
+Primary key: (`user_id`, `idempotency_key`). Index: `league_id`.
+
+### `league_categories`
+
+Competition categories (e.g. *Varonil*, *Femenil*, *Sub-15*) inside a league. See [League categories](#league-categories-varonil--femenil--sub-15--).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid PK | Category id. |
+| `league_id` | uuid FK → `leagues.id` | Owning league (cascade delete). |
+| `code` | text NOT NULL | Stable key (e.g. `varonil`, `femenil`, `sub_15`). Unique per league via `lower(code)`. |
+| `name` | text NOT NULL | Display name. |
+| `gender` | `league_category_gender` NOT NULL DEFAULT `unspecified` | Gender bucket. |
+| `age_min` | integer | Min age (inclusive). `NULL` = no lower bound. |
+| `age_max` | integer | Max age (inclusive). `NULL` = no upper bound. |
+| `sort_order` | integer NOT NULL DEFAULT 0 | Display order in UI. |
+| `metadata` | jsonb NOT NULL DEFAULT `{}` | Extra fields (rules per category, etc.). |
+| `created_at` | timestamptz NOT NULL | Creation time. |
+| `updated_at` | timestamptz NOT NULL | Last update. |
+
+Unique index: (`league_id`, `lower(code)`). Index: `league_id`.
 
 ### `venues`
 
@@ -288,7 +381,8 @@ Team enrollment in a season; holds **standings / stats** for that season.
 | `id` | uuid PK | Enrollment row id. |
 | `season_id` | uuid FK → `seasons.id` | Season (cascade delete). |
 | `team_id` | uuid FK → `teams.id` | Team (cascade delete). |
-| `division` | text | Division or group label. |
+| `league_category_id` | uuid FK → `league_categories.id` | Category in this season (set null on delete). Nullable. |
+| `division` | text | Division or group label (free text, used inside a category). |
 | `seed` | integer | Seeding. |
 | `points` | integer NOT NULL DEFAULT 0 | League points. |
 | `played` | integer NOT NULL DEFAULT 0 | Matches played. |
@@ -360,6 +454,7 @@ Single match in a season.
 |--------|------|-------------|
 | `id` | uuid PK | Match id. |
 | `season_id` | uuid FK → `seasons.id` | Season (cascade delete). |
+| `league_category_id` | uuid FK → `league_categories.id` | Category of this match (set null on delete). Nullable. |
 | `matchday` | integer | Matchday number. |
 | `round_label` | text | Knockout / round label. |
 | `venue_id` | uuid FK → `venues.id` | Venue (set null on delete). |
@@ -661,6 +756,17 @@ Prize draws / raffles scoped to a season.
 - Numbered SQL files under `drizzle/`; journal in `drizzle/meta/_journal.json`.
 - **Apply:** `npm run db:migrate`.
 - Triggers: e.g. `set_updated_at()` on some tables (see migration `0001` and football migrations).
+
+| File | Summary |
+|------|---------|
+| `0000_initial` | Baseline schema. |
+| `0001_set_updated_at` | `updated_at` trigger helper. |
+| `0002_supabase_auth_user_id` | Auth linkage on `users`. |
+| `0003_football_match_details` | Football match detail tables. |
+| `0004_match_fouls` | Match fouls / discipline links. |
+| `0005_spooky_bulldozer` | **`dashboard_access_requests`**; **`users.dashboard_access_granted_at`**. |
+| `0006_lying_living_tribunal` | **`league_create_idempotency`**. |
+| `0007_lean_trish_tilby` | **`league_categories`** + enum **`league_category_gender`**; nullable **`season_teams.league_category_id`** and **`matches.league_category_id`**. |
 
 ---
 
