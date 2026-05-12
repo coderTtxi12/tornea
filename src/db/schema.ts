@@ -328,6 +328,29 @@ export const leagueCreateIdempotency = pgTable(
   ],
 );
 
+/**
+ * Dedup de creación de categoría (`league_categories`) por usuario + Idempotency-Key.
+ */
+export const leagueCategoryCreateIdempotency = pgTable(
+  "league_category_create_idempotency",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leagueCategoryId: uuid("league_category_id")
+      .notNull()
+      .references(() => leagueCategories.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.idempotencyKey] }),
+    index("league_category_create_idempotency_category_id_idx").on(t.leagueCategoryId),
+  ],
+);
+
 export const venues = pgTable(
   "venues",
   {

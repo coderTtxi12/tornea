@@ -1,0 +1,323 @@
+"use client";
+
+import { useRef, useState } from "react";
+
+import {
+  leagueCategoryGenderOptions,
+  newLeagueCategoryJsonSchema,
+} from "./new-league-category-form-schema";
+
+type NewLeagueCategoryFormProps = {
+  leagueId: string;
+  leagueName: string;
+  onClose: () => void;
+  onCategoryCreated?: () => void;
+};
+
+function parseOptionalBirthYear(raw: string): number | null | "invalid" {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < 1000 || n > 9999) return "invalid";
+  return n;
+}
+
+function parseOptionalPositiveInt(raw: string): number | null | "invalid" {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < 1) return "invalid";
+  return n;
+}
+
+export function NewLeagueCategoryForm({
+  leagueId,
+  leagueName,
+  onClose,
+  onCategoryCreated,
+}: NewLeagueCategoryFormProps) {
+  const idempotencyKeyRef = useRef<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [gender, setGender] = useState<(typeof leagueCategoryGenderOptions)[number]["value"]>(
+    "male",
+  );
+  const [birthYearMinStr, setBirthYearMinStr] = useState("");
+  const [birthYearMaxStr, setBirthYearMaxStr] = useState("");
+  const [minTeamsStr, setMinTeamsStr] = useState("");
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function resetForm() {
+    setName("");
+    setGender("male");
+    setBirthYearMinStr("");
+    setBirthYearMaxStr("");
+    setMinTeamsStr("");
+    setFieldErrors({});
+    setSubmitError(null);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFieldErrors({});
+    setSubmitError(null);
+
+    const nextErrors: Record<string, string> = {};
+    const birthYearMin = parseOptionalBirthYear(birthYearMinStr);
+    const birthYearMax = parseOptionalBirthYear(birthYearMaxStr);
+    const minTeams = parseOptionalPositiveInt(minTeamsStr);
+
+    if (birthYearMin === "invalid") {
+      nextErrors.birthYearMin = "Indica un año de 4 dígitos o dejá vacío.";
+    }
+    if (birthYearMax === "invalid") {
+      nextErrors.birthYearMax = "Indica un año de 4 dígitos o dejá vacío.";
+    }
+    if (minTeams === "invalid") {
+      nextErrors.minTeamsToStart = "Indica un entero ≥ 1 o dejá vacío.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+
+    const body = {
+      name: name.trim(),
+      gender,
+      birthYearMin: birthYearMin as number | null,
+      birthYearMax: birthYearMax as number | null,
+      minTeamsToStart: minTeams as number | null,
+    };
+
+    const parsed = newLeagueCategoryJsonSchema.safeParse(body);
+    if (!parsed.success) {
+      const zErr: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0];
+        if (typeof key === "string" && zErr[key] === undefined) {
+          zErr[key] = issue.message;
+        }
+      }
+      setFieldErrors(zErr);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/categories`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKeyRef.current,
+        },
+        body: JSON.stringify(parsed.data),
+      });
+
+      let data: { error?: string; fields?: Record<string, string> } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (res.status === 401) {
+        window.location.href = "/";
+        return;
+      }
+
+      if (!res.ok) {
+        if (data.fields && typeof data.fields === "object") {
+          setFieldErrors(data.fields);
+        }
+        setSubmitError(
+          typeof data.error === "string"
+            ? data.error
+            : "No se pudo crear la categoría. Intentá de nuevo.",
+        );
+        return;
+      }
+
+      onCategoryCreated?.();
+      idempotencyKeyRef.current = null;
+      resetForm();
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="w-full">
+      <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
+        Liga: <span className="text-foreground font-medium">{leagueName}</span>. El{" "}
+        <code className="text-foreground-muted text-xs">code</code> se genera en el servidor (único
+        por liga). Reintentos con la misma clave no duplican la categoría.
+      </p>
+
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        {submitError ? (
+          <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-2.5 text-sm">
+            {submitError}
+          </div>
+        ) : null}
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Nombre de categoría</span>
+          <input
+            type="text"
+            name="categoryName"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            autoComplete="off"
+            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            aria-invalid={!!fieldErrors.name}
+          />
+          {fieldErrors.name ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.name}</span>
+          ) : null}
+        </label>
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Género</span>
+          <select
+            name="gender"
+            value={gender}
+            onChange={(e) =>
+              setGender(e.target.value as (typeof leagueCategoryGenderOptions)[number]["value"])
+            }
+            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            aria-invalid={!!fieldErrors.gender}
+          >
+            {leagueCategoryGenderOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.gender ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.gender}</span>
+          ) : null}
+        </label>
+
+        <fieldset className="border-border rounded-brand-md border px-3 py-3">
+          <legend className="text-foreground-muted px-1 text-xs font-medium">
+            Reglas deportivas (opcional)
+          </legend>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-1">
+              <span className="text-foreground-muted text-xs font-medium">
+                Año de nacimiento mínimo
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1900}
+                max={new Date().getFullYear() + 1}
+                name="birthYearMin"
+                value={birthYearMinStr}
+                onChange={(e) => setBirthYearMinStr(e.target.value)}
+                placeholder="Ej. 2008 · vacío = sin límite"
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                aria-invalid={!!fieldErrors.birthYearMin}
+              />
+              {fieldErrors.birthYearMin ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.birthYearMin}
+                </span>
+              ) : (
+                <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+                  El más antiguo permitido (nadie nacido antes de este año).
+                </span>
+              )}
+            </label>
+            <label className="block sm:col-span-1">
+              <span className="text-foreground-muted text-xs font-medium">
+                Año de nacimiento máximo
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1900}
+                max={new Date().getFullYear() + 1}
+                name="birthYearMax"
+                value={birthYearMaxStr}
+                onChange={(e) => setBirthYearMaxStr(e.target.value)}
+                placeholder="Ej. 2012 · vacío = sin límite"
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                aria-invalid={!!fieldErrors.birthYearMax}
+              />
+              {fieldErrors.birthYearMax ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.birthYearMax}
+                </span>
+              ) : (
+                <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+                  El más reciente permitido (nadie nacido después de este año).
+                </span>
+              )}
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-foreground-muted text-xs font-medium">
+                Equipos mínimos para iniciar
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                name="minTeamsToStart"
+                value={minTeamsStr}
+                onChange={(e) => setMinTeamsStr(e.target.value)}
+                placeholder="Vacío = sin mínimo registrado"
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                aria-invalid={!!fieldErrors.minTeamsToStart}
+              />
+              {fieldErrors.minTeamsToStart ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.minTeamsToStart}
+                </span>
+              ) : (
+                <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+                  Se guarda en <code className="text-foreground-muted">metadata.minTeamsToStart</code>.
+                </span>
+              )}
+            </label>
+          </div>
+        </fieldset>
+
+        <div className="border-border mt-2 flex flex-wrap gap-3 border-t pt-5">
+          <button
+            type="button"
+            className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => {
+              idempotencyKeyRef.current = null;
+              resetForm();
+              onClose();
+            }}
+            disabled={submitting}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            disabled={submitting}
+          >
+            {submitting ? "Guardando…" : "Guardar categoría"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

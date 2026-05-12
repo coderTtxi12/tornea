@@ -1,30 +1,12 @@
 "use client";
 
-import { useState } from "react";
-
 import { floatCard } from "../views/dashboard-view-primitives";
-import { NewLeagueForm } from "./NewLeagueForm";
 
 export function DashboardEmptyLeaguesPanel({
-  onLeagueCreated,
+  onOpenNewLeagueDrawer,
 }: {
-  onLeagueCreated?: () => void;
+  onOpenNewLeagueDrawer: () => void;
 }) {
-  const [step, setStep] = useState<"hero" | "form">("hero");
-
-  if (step === "form") {
-    return (
-      <div className="flex flex-col items-stretch px-1 py-6 sm:px-2 lg:py-8">
-        <div className={`${floatCard} mx-auto w-full max-w-2xl p-6 sm:p-8`}>
-          <NewLeagueForm
-            onCancel={() => setStep("hero")}
-            onLeagueCreated={onLeagueCreated}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-[min(70dvh,36rem)] flex-col items-center justify-center px-4 py-12">
       <div className={`${floatCard} max-w-md px-8 py-10 text-center`}>
@@ -35,20 +17,20 @@ export function DashboardEmptyLeaguesPanel({
           Aún no tienes ligas en Tornea
         </h1>
         <p className="text-foreground-muted mt-2 text-sm leading-relaxed">
-          Crea tu primera organización para armar temporadas, fixture y tablas. Completa el formulario
-          y la liga queda guardada en tu cuenta.
+          Crea tu primera organización para armar temporadas, fixture y tablas. El formulario se abre
+          en un panel a la derecha.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <button
             type="button"
-            onClick={() => setStep("form")}
+            onClick={onOpenNewLeagueDrawer}
             className="rounded-full bg-brand-blue px-6 py-3 text-sm font-bold text-white"
           >
             Agregar nueva liga
           </button>
           <button
             type="button"
-            onClick={() => setStep("form")}
+            onClick={onOpenNewLeagueDrawer}
             className="border-border text-foreground-muted hover:text-foreground rounded-full border px-6 py-3 text-sm font-semibold"
           >
             Comenzar

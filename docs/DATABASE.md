@@ -22,6 +22,8 @@ flowchart TB
   leagues[leagues]
   league_members[league_members]
   league_create_idempotency[league_create_idempotency]
+  league_categories[league_categories]
+  league_category_create_idempotency[league_category_create_idempotency]
   seasons[seasons]
   teams[teams]
   season_teams[season_teams]
@@ -33,8 +35,11 @@ flowchart TB
   users --> leagues
   users --> league_members
   users --> league_create_idempotency
+  users --> league_category_create_idempotency
   leagues --> league_members
   leagues --> league_create_idempotency
+  leagues --> league_categories
+  league_category_create_idempotency --> league_categories
   leagues --> seasons
   leagues --> teams
   leagues --> venues
@@ -48,6 +53,7 @@ flowchart TB
 
 - **`dashboard_access_requests`:** solicitudes de acceso al panel (waitlist); ver columna `users.dashboard_access_granted_at`.
 - **`league_create_idempotency`:** deduplicación de creación de liga por usuario + clave de idempotencia HTTP (evita ligas duplicadas por doble envío).
+- **`league_category_create_idempotency`:** deduplicación de creación de categoría (`league_categories`) por usuario + clave HTTP (evita categorías duplicadas por doble envío).
 - **`league_categories`:** categorías de competencia dentro de una liga (varonil, femenil, sub-15, etc.); ver [League categories](#league-categories-varonil--femenil--sub-15--).
 
 - **`leagues`:** Top-level organization (“tenant” for a competition).
@@ -112,6 +118,14 @@ Anchor points (both nullable for backwards compatibility — a category may not 
 `(league_id, lower(code))` is unique, so `code` (e.g. `varonil`, `femenil`, `sub_15`) is a stable key safe for URLs/UI.
 
 For mixed-gender or unisex categories, use **`gender = 'mixed'`** (a game/category where both genders play). Use **`'unspecified'`** when the league does not track gender. Age windows are open intervals via `age_min` / `age_max` (nullable means "no limit on that side").
+
+**`metadata` convention (app):** optional numeric **`minTeamsToStart`** (minimum teams required to start the category competition); optional **`birthYearMin`** / **`birthYearMax`** (inclusive calendar-year window for allowed birth years). These live in `metadata` when the product captures them; there is no separate SQL column for birth years.
+
+### League category create idempotency
+
+Table **`league_category_create_idempotency`** stores one row per **`(user_id, idempotency_key)`** pointing at the **`league_category_id`** created on first successful `POST`. Replays with the same key return the **same** category and must **not** insert another row (`ON DELETE CASCADE` from **`league_categories`** removes the mapping if the category is deleted).
+
+Serialize create attempts per key with **`pg_advisory_xact_lock`** in the same transaction as the insert (same pattern as league creation).
 
 ---
 
@@ -301,6 +315,19 @@ Dedupes **league creation** per app user and HTTP idempotency key (see [League c
 
 Primary key: (`user_id`, `idempotency_key`). Index: `league_id`.
 
+### `league_category_create_idempotency`
+
+Dedupes **league category creation** per app user and HTTP idempotency key (same pattern as **`league_create_idempotency`**).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `user_id` | uuid FK → `users.id` | Creating user (cascade delete). PK part 1. |
+| `idempotency_key` | text NOT NULL | Opaque client key (e.g. UUID). PK part 2. |
+| `league_category_id` | uuid FK → `league_categories.id` | Category created on first success (cascade delete). |
+| `created_at` | timestamptz NOT NULL | When the mapping was stored. |
+
+Primary key: (`user_id`, `idempotency_key`). Index: `league_category_id`.
+
 ### `league_categories`
 
 Competition categories (e.g. *Varonil*, *Femenil*, *Sub-15*) inside a league. See [League categories](#league-categories-varonil--femenil--sub-15--).
@@ -315,7 +342,7 @@ Competition categories (e.g. *Varonil*, *Femenil*, *Sub-15*) inside a league. Se
 | `age_min` | integer | Min age (inclusive). `NULL` = no lower bound. |
 | `age_max` | integer | Max age (inclusive). `NULL` = no upper bound. |
 | `sort_order` | integer NOT NULL DEFAULT 0 | Display order in UI. |
-| `metadata` | jsonb NOT NULL DEFAULT `{}` | Extra fields (rules per category, etc.). |
+| `metadata` | jsonb NOT NULL DEFAULT `{}` | Extra fields (rules per category). App may store **`minTeamsToStart`**, **`birthYearMin`**, **`birthYearMax`**. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
 
@@ -767,6 +794,7 @@ Prize draws / raffles scoped to a season.
 | `0005_spooky_bulldozer` | **`dashboard_access_requests`**; **`users.dashboard_access_granted_at`**. |
 | `0006_lying_living_tribunal` | **`league_create_idempotency`**. |
 | `0007_lean_trish_tilby` | **`league_categories`** + enum **`league_category_gender`**; nullable **`season_teams.league_category_id`** and **`matches.league_category_id`**. |
+| `0008_unusual_catseye` | **`league_category_create_idempotency`** (idempotencia al crear categorías). |
 
 ---
 

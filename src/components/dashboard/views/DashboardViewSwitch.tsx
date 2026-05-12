@@ -19,15 +19,25 @@ import { DashboardVenuesView } from "./DashboardVenuesView";
 export function DashboardViewSwitch({
   nav,
   leagueOrgCards,
+  onOpenNewLeagueDrawer,
+  onOpenNewCategoryDrawer,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
+  onOpenNewLeagueDrawer: () => void;
+  onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
 }) {
   switch (nav) {
     case "home":
       return <DashboardHomeView />;
     case "leagues":
-      return <DashboardLeaguesView leagues={leagueOrgCards} />;
+      return (
+        <DashboardLeaguesView
+          leagues={leagueOrgCards}
+          onOpenNewLeagueDrawer={onOpenNewLeagueDrawer}
+          onOpenNewCategoryDrawer={onOpenNewCategoryDrawer}
+        />
+      );
     case "fixture":
       return <DashboardFixtureView />;
     case "live":

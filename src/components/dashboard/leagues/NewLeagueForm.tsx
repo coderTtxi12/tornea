@@ -8,8 +8,6 @@ import {
   getCountryDialOptions,
 } from "@/lib/phone/country-dial-options";
 
-import { LEAGUE_CATEGORY_PRESETS } from "@/logic/leagues/league-category-presets";
-
 import {
   LEAGUE_SHIELD_ACCEPT_ATTR,
   LEAGUE_SHIELD_MAX_FILE_BYTES,
@@ -18,13 +16,19 @@ import {
 import { newLeagueTextFieldsSchema } from "./new-league-form-schema";
 
 type NewLeagueFormProps = {
-  /** Vuelve al panel inicial (hero). */
+  /** Vuelve al panel inicial (hero) o cierra el drawer. */
   onCancel: () => void;
   /** Tras crear la liga correctamente (refetch del dashboard). */
   onLeagueCreated?: () => void;
+  /** En panel lateral: oculta el título duplicado (el drawer ya lo muestra). */
+  variant?: "standalone" | "drawer";
 };
 
-export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps) {
+export function NewLeagueForm({
+  onCancel,
+  onLeagueCreated,
+  variant = "standalone",
+}: NewLeagueFormProps) {
   const idempotencyKeyRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const countryDialOptions = useMemo(() => getCountryDialOptions(), []);
@@ -36,7 +40,6 @@ export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps)
   const [contactEmail, setContactEmail] = useState("");
   const [organizationAddress, setOrganizationAddress] = useState("");
   const [shield, setShield] = useState<File | null>(null);
-  const [categoryCodes, setCategoryCodes] = useState<readonly string[]>([]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [shieldError, setShieldError] = useState<string | null>(null);
@@ -63,7 +66,6 @@ export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps)
     setContactEmail("");
     setOrganizationAddress("");
     setShield(null);
-    setCategoryCodes([]);
     setFieldErrors({});
     setShieldError(null);
     setSubmitError(null);
@@ -137,9 +139,6 @@ export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps)
       if (shield) {
         fd.set("shield", shield);
       }
-      if (categoryCodes.length > 0) {
-        fd.set("categories", JSON.stringify(categoryCodes));
-      }
 
       const res = await fetch("/api/leagues", {
         method: "POST",
@@ -186,15 +185,24 @@ export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps)
     onCancel();
   }
 
+  const containerWidth = variant === "drawer" ? "w-full" : "w-full max-w-xl";
+
   return (
-    <div className="w-full max-w-xl">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold tracking-tight">Nueva liga</h2>
-        <p className="text-foreground-muted mt-1 text-sm leading-relaxed">
-          Los datos se guardan en tu cuenta. Puedes repetir el envío con seguridad: si la red falla, no
-          se duplica la liga.
+    <div className={containerWidth}>
+      {variant === "standalone" ? (
+        <div className="mb-6">
+          <h2 className="text-xl font-bold tracking-tight">Nueva liga</h2>
+          <p className="text-foreground-muted mt-1 text-sm leading-relaxed">
+            Los datos se guardan en tu cuenta. Puedes repetir el envío con seguridad: si la red falla, no
+            se duplica la liga.
+          </p>
+        </div>
+      ) : (
+        <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
+          Los datos se guardan en tu cuenta. Reintentos con la misma sesión no duplican la liga gracias
+          al header Idempotency-Key.
         </p>
-      </div>
+      )}
 
       <form className="flex flex-col" onSubmit={handleSubmit}>
         {submitError ? (
@@ -244,44 +252,6 @@ export function NewLeagueForm({ onCancel, onLeagueCreated }: NewLeagueFormProps)
               />
             </div>
           ) : null}
-        </fieldset>
-
-        <fieldset className="mt-4">
-          <legend className="text-foreground-muted text-xs font-medium">
-            Categorías (opcional)
-          </legend>
-          <p className="text-foreground-subtle mt-1 text-[11px] leading-relaxed">
-            Marca las categorías que correrán en paralelo (varonil, femenil, sub-15, etc.). Después
-            podrás agregar más.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {LEAGUE_CATEGORY_PRESETS.map((p) => {
-              const isSelected = categoryCodes.includes(p.code);
-              return (
-                <button
-                  type="button"
-                  key={p.code}
-                  aria-pressed={isSelected}
-                  disabled={submitting}
-                  onClick={() => {
-                    setCategoryCodes((prev) =>
-                      prev.includes(p.code)
-                        ? prev.filter((c) => c !== p.code)
-                        : [...prev, p.code],
-                    );
-                  }}
-                  className={
-                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 " +
-                    (isSelected
-                      ? "border-brand-blue bg-brand-blue/15 text-brand-blue"
-                      : "border-border text-foreground-muted hover:text-foreground hover:border-brand-teal/40")
-                  }
-                >
-                  {p.name}
-                </button>
-              );
-            })}
-          </div>
         </fieldset>
 
         <label className="mt-4 block">

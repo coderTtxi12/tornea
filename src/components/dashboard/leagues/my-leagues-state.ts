@@ -3,6 +3,13 @@ export type MyLeagueCategorySummary = {
   code: string;
   name: string;
   gender: "male" | "female" | "mixed" | "unspecified";
+  ageMin: number | null;
+  ageMax: number | null;
+  birthYearMin: number | null;
+  birthYearMax: number | null;
+  minTeamsToStart: number | null;
+  /** ISO string. */
+  createdAt: string;
 };
 
 export type MyLeaguesApiItem = {

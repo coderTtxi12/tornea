@@ -9,7 +9,25 @@ export type OwnedLeagueCategorySummary = {
   code: string;
   name: string;
   gender: "male" | "female" | "mixed" | "unspecified";
+  ageMin: number | null;
+  ageMax: number | null;
+  /** `metadata.birthYearMin` si está y es número. */
+  birthYearMin: number | null;
+  /** `metadata.birthYearMax` si está y es número. */
+  birthYearMax: number | null;
+  /** `metadata.minTeamsToStart` si está y es número. */
+  minTeamsToStart: number | null;
+  /** ISO string de `created_at`. */
+  createdAt: string;
 };
+
+function pickMetadataInt(metadata: unknown, key: string): number | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const v = (metadata as Record<string, unknown>)[key];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
 
 export type OwnedLeagueOrgCard = {
   id: string;
@@ -204,7 +222,11 @@ export async function listOwnedLeaguesOrganizationCards(
       code: leagueCategories.code,
       name: leagueCategories.name,
       gender: leagueCategories.gender,
+      ageMin: leagueCategories.ageMin,
+      ageMax: leagueCategories.ageMax,
+      metadata: leagueCategories.metadata,
       sortOrder: leagueCategories.sortOrder,
+      createdAt: leagueCategories.createdAt,
     })
     .from(leagueCategories)
     .where(inArray(leagueCategories.leagueId, leagueIds))
@@ -216,7 +238,19 @@ export async function listOwnedLeaguesOrganizationCards(
   const categoriesByLeague = new Map<string, OwnedLeagueCategorySummary[]>();
   for (const c of categoryRows) {
     const list = categoriesByLeague.get(c.leagueId) ?? [];
-    list.push({ id: c.id, code: c.code, name: c.name, gender: c.gender });
+    list.push({
+      id: c.id,
+      code: c.code,
+      name: c.name,
+      gender: c.gender,
+      ageMin: c.ageMin,
+      ageMax: c.ageMax,
+      birthYearMin: pickMetadataInt(c.metadata, "birthYearMin"),
+      birthYearMax: pickMetadataInt(c.metadata, "birthYearMax"),
+      minTeamsToStart: pickMetadataInt(c.metadata, "minTeamsToStart"),
+      createdAt:
+        c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt ?? ""),
+    });
     categoriesByLeague.set(c.leagueId, list);
   }
 

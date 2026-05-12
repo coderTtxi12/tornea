@@ -1,13 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { DashboardRightSlideover } from "./DashboardRightSlideover";
 import { DashboardRightRail } from "./DashboardRightRail";
 import {
   DashboardEmptyLeaguesPanel,
   LeaguesMainError,
   LeaguesMainLoading,
+  NewLeagueCategoryForm,
+  NewLeagueForm,
   type DashboardMyLeaguesState,
 } from "./leagues";
 import {
@@ -26,6 +29,11 @@ export type DashboardArenaLayoutProps = {
   myLeagues: DashboardMyLeaguesState;
   onLeagueCreated?: () => void;
 };
+
+type RightDrawerState =
+  | { kind: "closed" }
+  | { kind: "new-league" }
+  | { kind: "new-category"; leagueId: string; leagueName: string };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -116,10 +124,27 @@ export function DashboardArenaLayout({
   onLeagueCreated,
 }: DashboardArenaLayoutProps) {
   const [nav, setNav] = useState<DashboardNavKey>("home");
+  const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
+  const [leagueFormKey, setLeagueFormKey] = useState(0);
+  const [categoryFormKey, setCategoryFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
 
   const hasLeagues =
     myLeagues.status === "ready" && myLeagues.items.length > 0;
+
+  const openNewLeagueDrawer = useCallback(() => {
+    setLeagueFormKey((k) => k + 1);
+    setDrawer({ kind: "new-league" });
+  }, []);
+
+  const openNewCategoryDrawer = useCallback((args: { leagueId: string; leagueName: string }) => {
+    setCategoryFormKey((k) => k + 1);
+    setDrawer({ kind: "new-category", ...args });
+  }, []);
+
+  const closeDrawer = useCallback(() => {
+    setDrawer({ kind: "closed" });
+  }, []);
 
   return (
     <div
@@ -206,13 +231,15 @@ export function DashboardArenaLayout({
                   onRetry={myLeagues.onRetry}
                 />
               ) : !hasLeagues ? (
-                <DashboardEmptyLeaguesPanel onLeagueCreated={onLeagueCreated} />
+                <DashboardEmptyLeaguesPanel onOpenNewLeagueDrawer={openNewLeagueDrawer} />
               ) : (
                 <DashboardViewSwitch
                   nav={nav}
                   leagueOrgCards={
                     myLeagues.status === "ready" ? myLeagues.items : []
                   }
+                  onOpenNewLeagueDrawer={openNewLeagueDrawer}
+                  onOpenNewCategoryDrawer={openNewCategoryDrawer}
                 />
               )}
             </div>
@@ -221,6 +248,40 @@ export function DashboardArenaLayout({
           {hasLeagues ? <DashboardRightRail /> : null}
         </div>
       </div>
+
+      {drawer.kind !== "closed" ? (
+        <DashboardRightSlideover
+          open
+          size="xl"
+          title={drawer.kind === "new-league" ? "Nueva liga" : "Nueva categoría"}
+          description={
+            drawer.kind === "new-league"
+              ? "Completá los datos; el escudo es opcional. Se usa Idempotency-Key para evitar duplicados si la red falla."
+              : "La categoría queda en league_categories y se ordena al final (sort_order)."
+          }
+          onClose={closeDrawer}
+        >
+          {drawer.kind === "new-league" ? (
+            <NewLeagueForm
+              key={leagueFormKey}
+              variant="drawer"
+              onCancel={closeDrawer}
+              onLeagueCreated={() => {
+                onLeagueCreated?.();
+                closeDrawer();
+              }}
+            />
+          ) : (
+            <NewLeagueCategoryForm
+              key={`${drawer.leagueId}-${categoryFormKey}`}
+              leagueId={drawer.leagueId}
+              leagueName={drawer.leagueName}
+              onClose={closeDrawer}
+              onCategoryCreated={onLeagueCreated}
+            />
+          )}
+        </DashboardRightSlideover>
+      ) : null}
     </div>
   );
 }

@@ -3,6 +3,7 @@ export { DashboardEmptyLeaguesPanel } from "./DashboardEmptyLeaguesPanel";
 export { LeaguesMainError } from "./LeaguesMainError";
 export { LeaguesMainLoading } from "./LeaguesMainLoading";
 export { NewLeagueForm } from "./NewLeagueForm";
+export { NewLeagueCategoryForm } from "./NewLeagueCategoryForm";
 export {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
 } from "./league-shield-constraints";
