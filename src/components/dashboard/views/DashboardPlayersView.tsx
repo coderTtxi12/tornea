@@ -7,7 +7,15 @@ import {
   MockActionButton,
 } from "./dashboard-view-primitives";
 
-export function DashboardPlayersView() {
+type DashboardPlayersViewProps = {
+  hasTeams: boolean;
+  onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
+};
+
+export function DashboardPlayersView({
+  hasTeams,
+  onOpenRegisterPlayerDrawer,
+}: DashboardPlayersViewProps) {
   return (
     <>
       <DashboardViewHeader
@@ -16,7 +24,15 @@ export function DashboardPlayersView() {
         actions={
           <>
             <MockActionButton variant="secondary">Buscar</MockActionButton>
-            <MockActionButton variant="primary">Fichar jugador</MockActionButton>
+            <button
+              type="button"
+              onClick={() => onOpenRegisterPlayerDrawer()}
+              disabled={!hasTeams}
+              title={hasTeams ? undefined : "Primero crea un equipo"}
+              className="rounded-full bg-brand-blue px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Agregar jugador
+            </button>
           </>
         }
       />

@@ -11,6 +11,7 @@ import {
   LeaguesMainLoading,
   NewLeagueCategoryForm,
   NewLeagueForm,
+  NewPlayerForm,
   NewTeamForm,
   type DashboardMyLeaguesState,
 } from "./leagues";
@@ -36,7 +37,8 @@ type RightDrawerState =
   | { kind: "new-league" }
   | { kind: "new-category"; leagueId: string; leagueName: string }
   | { kind: "register-team" }
-  | { kind: "edit-team"; leagueId: string; teamId: string };
+  | { kind: "edit-team"; leagueId: string; teamId: string }
+  | { kind: "register-player"; prefillTeamId?: string };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -131,6 +133,7 @@ export function DashboardArenaLayout({
   const [leagueFormKey, setLeagueFormKey] = useState(0);
   const [categoryFormKey, setCategoryFormKey] = useState(0);
   const [teamFormKey, setTeamFormKey] = useState(0);
+  const [playerFormKey, setPlayerFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
 
   const hasLeagues =
@@ -154,6 +157,11 @@ export function DashboardArenaLayout({
   const openEditTeamDrawer = useCallback((args: { leagueId: string; teamId: string }) => {
     setTeamFormKey((k) => k + 1);
     setDrawer({ kind: "edit-team", ...args });
+  }, []);
+
+  const openRegisterPlayerDrawer = useCallback((args?: { prefillTeamId?: string }) => {
+    setPlayerFormKey((k) => k + 1);
+    setDrawer({ kind: "register-player", prefillTeamId: args?.prefillTeamId });
   }, []);
 
   const closeDrawer = useCallback(() => {
@@ -257,6 +265,7 @@ export function DashboardArenaLayout({
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
                   onOpenRegisterTeamDrawer={openRegisterTeamDrawer}
                   onOpenEditTeamDrawer={openEditTeamDrawer}
+                  onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
                 />
               )}
             </div>
@@ -277,7 +286,9 @@ export function DashboardArenaLayout({
                 ? "Nueva categoría"
                 : drawer.kind === "edit-team"
                   ? "Editar equipo"
-                  : "Registrar equipo"
+                  : drawer.kind === "register-player"
+                    ? "Agregar jugador"
+                    : "Registrar equipo"
           }
           description={
             drawer.kind === "new-league"
@@ -286,7 +297,9 @@ export function DashboardArenaLayout({
                 ? "La categoría queda en league_categories y se ordena al final (sort_order)."
                 : drawer.kind === "edit-team"
                   ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
-                  : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
+                  : drawer.kind === "register-player"
+                    ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
+                    : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
           }
           onClose={closeDrawer}
         >
@@ -324,6 +337,17 @@ export function DashboardArenaLayout({
               }
               onClose={closeDrawer}
               onTeamCreated={() => {
+                onLeagueCreated?.();
+                closeDrawer();
+              }}
+            />
+          ) : myLeagues.status === "ready" && drawer.kind === "register-player" ? (
+            <NewPlayerForm
+              key={`player-${playerFormKey}`}
+              teamRows={myLeagues.teams}
+              prefillTeamId={drawer.prefillTeamId}
+              onClose={closeDrawer}
+              onPlayerCreated={() => {
                 onLeagueCreated?.();
                 closeDrawer();
               }}

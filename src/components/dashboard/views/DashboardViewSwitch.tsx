@@ -24,6 +24,7 @@ export function DashboardViewSwitch({
   onOpenNewCategoryDrawer,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
+  onOpenRegisterPlayerDrawer,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
@@ -32,6 +33,7 @@ export function DashboardViewSwitch({
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
+  onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
 }) {
   switch (nav) {
     case "home":
@@ -57,7 +59,12 @@ export function DashboardViewSwitch({
         />
       );
     case "players":
-      return <DashboardPlayersView />;
+      return (
+        <DashboardPlayersView
+          hasTeams={teamRows.length > 0}
+          onOpenRegisterPlayerDrawer={onOpenRegisterPlayerDrawer}
+        />
+      );
     case "venues":
       return <DashboardVenuesView />;
     case "standings":

@@ -9,6 +9,7 @@ export { LeaguesMainLoading } from "./LeaguesMainLoading";
 export { NewLeagueForm } from "./NewLeagueForm";
 export { NewLeagueCategoryForm } from "./NewLeagueCategoryForm";
 export { NewTeamForm } from "./NewTeamForm";
+export { NewPlayerForm } from "./NewPlayerForm";
 export {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
 } from "./league-shield-constraints";
