@@ -11,6 +11,7 @@ import {
   LeaguesMainLoading,
   NewLeagueCategoryForm,
   NewLeagueForm,
+  NewTeamForm,
   type DashboardMyLeaguesState,
 } from "./leagues";
 import {
@@ -33,7 +34,9 @@ export type DashboardArenaLayoutProps = {
 type RightDrawerState =
   | { kind: "closed" }
   | { kind: "new-league" }
-  | { kind: "new-category"; leagueId: string; leagueName: string };
+  | { kind: "new-category"; leagueId: string; leagueName: string }
+  | { kind: "register-team" }
+  | { kind: "edit-team"; leagueId: string; teamId: string };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -127,6 +130,7 @@ export function DashboardArenaLayout({
   const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
   const [leagueFormKey, setLeagueFormKey] = useState(0);
   const [categoryFormKey, setCategoryFormKey] = useState(0);
+  const [teamFormKey, setTeamFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
 
   const hasLeagues =
@@ -140,6 +144,16 @@ export function DashboardArenaLayout({
   const openNewCategoryDrawer = useCallback((args: { leagueId: string; leagueName: string }) => {
     setCategoryFormKey((k) => k + 1);
     setDrawer({ kind: "new-category", ...args });
+  }, []);
+
+  const openRegisterTeamDrawer = useCallback(() => {
+    setTeamFormKey((k) => k + 1);
+    setDrawer({ kind: "register-team" });
+  }, []);
+
+  const openEditTeamDrawer = useCallback((args: { leagueId: string; teamId: string }) => {
+    setTeamFormKey((k) => k + 1);
+    setDrawer({ kind: "edit-team", ...args });
   }, []);
 
   const closeDrawer = useCallback(() => {
@@ -238,8 +252,11 @@ export function DashboardArenaLayout({
                   leagueOrgCards={
                     myLeagues.status === "ready" ? myLeagues.items : []
                   }
+                  teamRows={myLeagues.status === "ready" ? myLeagues.teams : []}
                   onOpenNewLeagueDrawer={openNewLeagueDrawer}
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
+                  onOpenRegisterTeamDrawer={openRegisterTeamDrawer}
+                  onOpenEditTeamDrawer={openEditTeamDrawer}
                 />
               )}
             </div>
@@ -253,11 +270,23 @@ export function DashboardArenaLayout({
         <DashboardRightSlideover
           open
           size="xl"
-          title={drawer.kind === "new-league" ? "Nueva liga" : "Nueva categoría"}
+          title={
+            drawer.kind === "new-league"
+              ? "Nueva liga"
+              : drawer.kind === "new-category"
+                ? "Nueva categoría"
+                : drawer.kind === "edit-team"
+                  ? "Editar equipo"
+                  : "Registrar equipo"
+          }
           description={
             drawer.kind === "new-league"
               ? "Completá los datos; el escudo es opcional. Se usa Idempotency-Key para evitar duplicados si la red falla."
-              : "La categoría queda en league_categories y se ordena al final (sort_order)."
+              : drawer.kind === "new-category"
+                ? "La categoría queda en league_categories y se ordena al final (sort_order)."
+                : drawer.kind === "edit-team"
+                  ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
+                  : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
           }
           onClose={closeDrawer}
         >
@@ -271,7 +300,7 @@ export function DashboardArenaLayout({
                 closeDrawer();
               }}
             />
-          ) : (
+          ) : drawer.kind === "new-category" ? (
             <NewLeagueCategoryForm
               key={`${drawer.leagueId}-${categoryFormKey}`}
               leagueId={drawer.leagueId}
@@ -279,7 +308,27 @@ export function DashboardArenaLayout({
               onClose={closeDrawer}
               onCategoryCreated={onLeagueCreated}
             />
-          )}
+          ) : myLeagues.status === "ready" &&
+            (drawer.kind === "register-team" || drawer.kind === "edit-team") ? (
+            <NewTeamForm
+              key={
+                drawer.kind === "edit-team"
+                  ? `edit-${drawer.leagueId}-${drawer.teamId}`
+                  : `register-${teamFormKey}`
+              }
+              leagues={myLeagues.items}
+              editTarget={
+                drawer.kind === "edit-team"
+                  ? { leagueId: drawer.leagueId, teamId: drawer.teamId }
+                  : null
+              }
+              onClose={closeDrawer}
+              onTeamCreated={() => {
+                onLeagueCreated?.();
+                closeDrawer();
+              }}
+            />
+          ) : null}
         </DashboardRightSlideover>
       ) : null}
     </div>

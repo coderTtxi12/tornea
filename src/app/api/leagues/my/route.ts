@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { listOwnedLeaguesOrganizationCards } from "@/logic/leagues/list-owned-league-org-cards";
+import { listOwnedTeamDashboardRows } from "@/logic/leagues/list-owned-team-dashboard-rows";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -19,9 +20,12 @@ export async function GET() {
     }
 
     const appUser = await syncAppUserFromSupabaseAuthUser(user);
-    const leagues = await listOwnedLeaguesOrganizationCards(appUser.id);
+    const [leagues, teams] = await Promise.all([
+      listOwnedLeaguesOrganizationCards(appUser.id),
+      listOwnedTeamDashboardRows(appUser.id),
+    ]);
 
-    return NextResponse.json({ leagues });
+    return NextResponse.json({ leagues, teams });
   } catch (e) {
     console.error("[GET /api/leagues/my]", e);
     return NextResponse.json(

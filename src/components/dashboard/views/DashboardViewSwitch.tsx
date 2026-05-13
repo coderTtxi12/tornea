@@ -2,7 +2,7 @@
 
 import type { DashboardNavKey } from "../nav";
 
-import type { MyLeaguesApiItem } from "../leagues/my-leagues-state";
+import type { MyLeaguesApiItem, MyLeaguesTeamRow } from "../leagues/my-leagues-state";
 
 import { DashboardDisciplineView } from "./DashboardDisciplineView";
 import { DashboardFixtureView } from "./DashboardFixtureView";
@@ -19,13 +19,19 @@ import { DashboardVenuesView } from "./DashboardVenuesView";
 export function DashboardViewSwitch({
   nav,
   leagueOrgCards,
+  teamRows,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
+  onOpenRegisterTeamDrawer,
+  onOpenEditTeamDrawer,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
+  teamRows: readonly MyLeaguesTeamRow[];
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
+  onOpenRegisterTeamDrawer: () => void;
+  onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
 }) {
   switch (nav) {
     case "home":
@@ -43,7 +49,13 @@ export function DashboardViewSwitch({
     case "live":
       return <DashboardLiveView />;
     case "teams":
-      return <DashboardTeamsView />;
+      return (
+        <DashboardTeamsView
+          teamRows={teamRows}
+          onOpenRegisterTeamDrawer={onOpenRegisterTeamDrawer}
+          onOpenEditTeamDrawer={onOpenEditTeamDrawer}
+        />
+      );
     case "players":
       return <DashboardPlayersView />;
     case "venues":

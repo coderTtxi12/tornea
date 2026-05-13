@@ -2,6 +2,7 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { leagueCategories, leagues, matches, seasons, teams } from "@/db/schema";
+import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "@/logic/leagues/season-pick";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export type OwnedLeagueCategorySummary = {
@@ -107,27 +108,6 @@ function sportLabelFromCode(code: string): string {
     .join(" ");
 }
 
-function seasonPickPriority(status: string): number {
-  switch (status) {
-    case "in_progress":
-      return 0;
-    case "scheduled":
-      return 1;
-    case "completed":
-      return 2;
-    case "cancelled":
-      return 3;
-    default:
-      return 9;
-  }
-}
-
-function dateSortKey(d: string | null): number {
-  if (!d) return 0;
-  const t = Date.parse(d);
-  return Number.isNaN(t) ? 0 : t;
-}
-
 /**
  * Ligas del dueño con conteos agregados para tarjetas “Ligas y organizaciones”.
  */
@@ -199,6 +179,7 @@ export async function listOwnedLeaguesOrganizationCards(
 
   const seasonRows = await db
     .select({
+      id: seasons.id,
       leagueId: seasons.leagueId,
       name: seasons.name,
       status: seasons.status,
@@ -261,15 +242,8 @@ export async function listOwnedLeaguesOrganizationCards(
       let seasonLabel = "Sin temporada";
       let seasonFormat: string | null = null;
       if (list.length > 0) {
-        const sorted = [...list].sort((a, b) => {
-          const pa = seasonPickPriority(a.status);
-          const pb = seasonPickPriority(b.status);
-          if (pa !== pb) return pa - pb;
-          const ta = dateSortKey(a.startsOn);
-          const tb = dateSortKey(b.startsOn);
-          return tb - ta;
-        });
-        const top = sorted[0]!;
+        const topId = pickTargetSeasonIdFromCandidates(list as SeasonPickRow[]);
+        const top = list.find((s) => s.id === topId) ?? list[0]!;
         seasonLabel = top.name;
         seasonFormat = top.format;
       }

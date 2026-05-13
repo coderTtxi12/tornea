@@ -191,21 +191,41 @@ export function NewLeagueCategoryForm({
 
         <label className="block">
           <span className="text-foreground-muted text-xs font-medium">Género</span>
-          <select
-            name="gender"
-            value={gender}
-            onChange={(e) =>
-              setGender(e.target.value as (typeof leagueCategoryGenderOptions)[number]["value"])
-            }
-            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
-            aria-invalid={!!fieldErrors.gender}
-          >
-            {leagueCategoryGenderOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative mt-1">
+            <select
+              name="gender"
+              value={gender}
+              onChange={(e) =>
+                setGender(e.target.value as (typeof leagueCategoryGenderOptions)[number]["value"])
+              }
+              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2"
+              aria-invalid={!!fieldErrors.gender}
+            >
+              {leagueCategoryGenderOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span
+              className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+              aria-hidden
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="opacity-70"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+          </div>
           {fieldErrors.gender ? (
             <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.gender}</span>
           ) : null}

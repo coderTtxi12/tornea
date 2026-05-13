@@ -7,6 +7,7 @@ import { DashboardArenaLayout } from "@/components/dashboard/DashboardArenaLayou
 import type {
   DashboardMyLeaguesState,
   MyLeaguesApiItem,
+  MyLeaguesTeamRow,
 } from "@/components/dashboard/leagues/my-leagues-state";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
@@ -17,6 +18,7 @@ import {
 
 type LeaguesMyApiResponse = {
   leagues: MyLeaguesApiItem[];
+  teams?: MyLeaguesTeamRow[];
 };
 
 export default function DashboardPage() {
@@ -66,7 +68,11 @@ export default function DashboardPage() {
 
         const data = (await res.json()) as LeaguesMyApiResponse;
         if (cancelled) return;
-        setMyLeagues({ status: "ready", items: data.leagues ?? [] });
+        setMyLeagues({
+          status: "ready",
+          items: data.leagues ?? [],
+          teams: data.teams ?? [],
+        });
       } catch {
         if (!cancelled) {
           setMyLeagues({
