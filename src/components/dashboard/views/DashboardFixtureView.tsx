@@ -212,7 +212,7 @@ export function DashboardFixtureView({
               disabled={!borrarFiltrosEnabled}
               title={
                 borrarFiltrosEnabled
-                  ? "Quita filtros de columnas y restablece el orden (fecha: más recientes primero)"
+                  ? "Quita filtros de columnas y restablece el orden (fecha: más próximos primero)"
                   : "No hay filtros ni cambios de orden que limpiar"
               }
               onClick={() => tableRef.current?.clearAllFilters()}

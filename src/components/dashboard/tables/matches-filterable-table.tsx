@@ -33,6 +33,60 @@ function statusLabelMx(s: string): string {
   return map[s] ?? s;
 }
 
+/** Texto mostrado en la columna Fase (`matchday` + `round_label`). */
+function formatPhaseDisplay(m: MyLeaguesMatchRow): string {
+  const parts: string[] = [];
+  if (m.matchday != null) parts.push(`J${m.matchday}`);
+  if (m.roundLabel?.trim()) parts.push(m.roundLabel.trim());
+  if (parts.length) return parts.join(" · ");
+  return "—";
+}
+
+type PhaseHighlight = "none" | "semifinal" | "final" | "tercer";
+
+function phaseHighlight(display: string): PhaseHighlight {
+  if (display === "—") return "none";
+  const t = display
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+
+  if (/\bsemi[\s-]?final\b|\bsemifinal\b/.test(t)) {
+    return "semifinal";
+  }
+  if (/\btercer[\s-]lugar\b|\b3(er|°|º)?[\s-]?lugar\b|tercer[\s-]puesto/.test(t)) {
+    return "tercer";
+  }
+  if (/(cuartos|octavos|dieciseisavos|diecisieisavos)\s+de\s+final/.test(t)) {
+    return "none";
+  }
+  if (/\bfinal\b/.test(t)) {
+    return "final";
+  }
+  return "none";
+}
+
+function PhaseBadge({ m }: { m: MyLeaguesMatchRow }) {
+  const text = formatPhaseDisplay(m);
+  const h = phaseHighlight(text);
+  const styles: Record<PhaseHighlight, string> = {
+    none: "border-border bg-surface-code/50 text-foreground-muted border",
+    semifinal:
+      "border-amber-400/45 bg-amber-500/18 text-amber-50 border shadow-[inset_0_0_0_1px_rgba(251,191,36,0.12)]",
+    final: "border-brand-blue/50 bg-brand-blue/25 text-brand-teal border",
+    tercer:
+      "border-orange-500/45 bg-orange-600/20 text-orange-50 border shadow-[inset_0_0_0_1px_rgba(249,115,22,0.12)]",
+  };
+  return (
+    <span
+      className={`inline-block max-w-[13rem] truncate rounded-md border px-2 py-0.5 text-xs font-semibold ${styles[h]}`}
+      title={text === "—" ? undefined : text}
+    >
+      {text}
+    </span>
+  );
+}
+
 function formatKickoff(iso: string, timeZone: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
@@ -63,10 +117,10 @@ type SortKey = "kickoff" | "matchup";
 
 export type MatchesTableSortState = { key: SortKey; dir: "asc" | "desc" };
 
-/** Orden inicial: fecha más reciente primero (coincide con `dir=desc` en el API). */
+/** Orden inicial: fecha ascendente = partido más próximo arriba (coincide con `dir=asc` en el API). */
 export const MATCHES_TABLE_DEFAULT_SORT: MatchesTableSortState = {
   key: "kickoff",
-  dir: "desc",
+  dir: "asc",
 };
 
 function isDefaultSort(s: MatchesTableSortState): boolean {
@@ -339,7 +393,7 @@ export const MatchesFilterableTable = forwardRef<
 
   function toggleSortColumn(column: SortKey) {
     const dirDefaults: Record<SortKey, "asc" | "desc"> = {
-      kickoff: "desc",
+      kickoff: "asc",
       matchup: "asc",
     };
     const next: MatchesTableSortState =
@@ -511,9 +565,12 @@ export const MatchesFilterableTable = forwardRef<
   return (
     <>
       <div className={wrap}>
-        <table className="w-full min-w-[48rem] text-left text-sm">
+        <table className="w-full min-w-[52rem] text-left text-sm">
           <thead>
             <tr className="text-foreground-muted border-border border-b text-[11px] font-bold tracking-wide uppercase">
+              <th className="px-4 py-3 align-top">
+                <span className={tableHeaderBtnClass}>Fase</span>
+              </th>
               <th className="px-4 py-3 align-top">
                 <button
                   type="button"
@@ -521,8 +578,8 @@ export const MatchesFilterableTable = forwardRef<
                   title={
                     sort.key === "kickoff"
                       ? sort.dir === "asc"
-                        ? "Más próximos primero"
-                        : "Más recientes primero"
+                        ? "Más próximos primero (predeterminado)"
+                        : "Más tardíos primero"
                       : "Ordenar por fecha y hora"
                   }
                   aria-label={
@@ -585,7 +642,6 @@ export const MatchesFilterableTable = forwardRef<
                   onToggleFilter("status", v),
                 )}
               </th>
-              <th className="px-4 py-3 align-top" />
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
@@ -601,6 +657,9 @@ export const MatchesFilterableTable = forwardRef<
             ) : (
               visibleRows.map((m) => (
                 <tr key={m.id} className="hover:bg-surface-code/20 transition-colors">
+                  <td className="px-4 py-2.5 align-middle">
+                    <PhaseBadge m={m} />
+                  </td>
                   <td className="text-foreground-muted px-4 py-2.5 whitespace-nowrap tabular-nums">
                     {formatKickoff(m.scheduledAt, m.timezone)}
                   </td>
@@ -625,16 +684,6 @@ export const MatchesFilterableTable = forwardRef<
                   </td>
                   <td className="px-4 py-2.5 align-middle">
                     <StatusBadge status={m.status} />
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <button
-                      type="button"
-                      disabled
-                      title="Próximamente"
-                      className="border-border text-foreground-muted cursor-not-allowed rounded-full border px-3 py-1 text-xs font-semibold opacity-50"
-                    >
-                      Detalle
-                    </button>
                   </td>
                 </tr>
               ))

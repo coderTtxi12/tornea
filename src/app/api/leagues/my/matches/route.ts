@@ -19,7 +19,8 @@ function parseListFilters(sp: URLSearchParams): OwnedMatchDashboardListFilters {
 
 function parseSort(sp: URLSearchParams): OwnedMatchDashboardListSort {
   const key = sp.get("sort") === "matchup" ? "matchup" : "kickoff";
-  const dir = sp.get("dir") === "asc" ? "asc" : "desc";
+  /** Por defecto `asc`: partido más próximo arriba. Solo `dir=desc` invierte. */
+  const dir = sp.get("dir") === "desc" ? "desc" : "asc";
   return { key, dir };
 }
 
