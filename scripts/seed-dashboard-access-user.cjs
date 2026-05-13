@@ -10,18 +10,11 @@
  *   npm run db:seed:dashboard-user -- other@email.com
  */
 const path = require("node:path");
-const fs = require("node:fs");
-const { config } = require("dotenv");
 const { Pool } = require("pg");
 
 const root = path.resolve(__dirname, "..");
-
-for (const file of [".env", ".env.local"]) {
-  const p = path.join(root, file);
-  if (fs.existsSync(p)) {
-    config({ path: p, override: file === ".env.local" });
-  }
-}
+const { loadDatabaseEnv } = require("./load-database-env.cjs");
+loadDatabaseEnv(root);
 
 const email = (process.argv[2] || "texor228@gmail.com").trim();
 
@@ -29,7 +22,7 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) {
     console.error(
-      "[db:seed:dashboard-user] DATABASE_URL is not set (.env or .env.local).",
+      "[db:seed:dashboard-user] DATABASE_URL is not set (revisá .env / .env.development.local).",
     );
     process.exit(1);
   }

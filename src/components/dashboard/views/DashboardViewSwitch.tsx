@@ -6,6 +6,7 @@ import type {
   MyLeaguesApiItem,
   MyLeaguesMatchRow,
   MyLeaguesPlayerRow,
+  MyLeaguesRefereeRow,
   MyLeaguesTeamRow,
   MyLeaguesVenueRow,
 } from "../leagues/my-leagues-state";
@@ -35,6 +36,8 @@ export function DashboardViewSwitch({
   onOpenNewVenueDrawer,
   onOpenEditVenueDrawer,
   venueRows,
+  refereeRows,
+  onOpenNewRefereeDrawer,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
   onOpenRegisterPlayerDrawer,
@@ -59,6 +62,8 @@ export function DashboardViewSwitch({
   onOpenNewVenueDrawer: () => void;
   onOpenEditVenueDrawer: (args: { leagueId: string; venueId: string }) => void;
   venueRows: readonly MyLeaguesVenueRow[];
+  refereeRows: readonly MyLeaguesRefereeRow[];
+  onOpenNewRefereeDrawer: () => void;
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
   onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
@@ -117,9 +122,11 @@ export function DashboardViewSwitch({
       return (
         <DashboardVenuesView
           venueRows={venueRows}
+          refereeRows={refereeRows}
           leagueOrgCards={leagueOrgCards}
           onOpenNewVenueDrawer={onOpenNewVenueDrawer}
           onOpenEditVenueDrawer={onOpenEditVenueDrawer}
+          onOpenNewRefereeDrawer={onOpenNewRefereeDrawer}
         />
       );
     case "standings":

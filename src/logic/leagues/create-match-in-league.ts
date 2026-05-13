@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   leagueCategories,
+  leagueReferees,
   leagues,
   matches,
   seasons,
@@ -25,6 +26,8 @@ export type CreateMatchInLeagueInput = {
   /** `matches.round_label` (final, semifinal, etc.). */
   roundLabel?: string | null;
   notes?: string | null;
+  /** Directorio `league_referees` (opcional). */
+  leagueRefereeId?: string | null;
 };
 
 export type CreateMatchInLeagueResult =
@@ -40,7 +43,8 @@ export type CreateMatchInLeagueResult =
         | "category_mismatch"
         | "bad_venue"
         | "bad_category"
-        | "bad_teams_league";
+        | "bad_teams_league"
+        | "bad_league_referee";
     };
 
 type MatchScheduleCoreError = Exclude<CreateMatchInLeagueResult, { ok: true }>["reason"];
@@ -63,6 +67,26 @@ type MatchScheduleCoreOk = {
   roundLabel: string | null;
   notes: string | null;
 };
+
+async function resolveLeagueRefereeIdForMatch(
+  db: ReturnType<typeof getDb>,
+  leagueId: string,
+  raw: string | null | undefined,
+): Promise<{ ok: true; id: string | null } | { ok: false; reason: "bad_league_referee" }> {
+  const t = raw?.trim();
+  if (!t) {
+    return { ok: true, id: null };
+  }
+  const [r] = await db
+    .select({ id: leagueReferees.id })
+    .from(leagueReferees)
+    .where(and(eq(leagueReferees.id, t), eq(leagueReferees.leagueId, leagueId)))
+    .limit(1);
+  if (!r) {
+    return { ok: false, reason: "bad_league_referee" };
+  }
+  return { ok: true, id: r.id };
+}
 
 /**
  * Valida temporada, equipos, categoría y cancha para alta o edición de un partido en una liga.
@@ -198,6 +222,11 @@ export async function createMatchInLeague(
   }
   const { leagueTimezone, catId, venueId, roundLabel, notes } = core.data;
 
+  const refRes = await resolveLeagueRefereeIdForMatch(db, input.leagueId, input.leagueRefereeId);
+  if (!refRes.ok) {
+    return { ok: false, reason: refRes.reason };
+  }
+
   const [created] = await db
     .insert(matches)
     .values({
@@ -210,6 +239,7 @@ export async function createMatchInLeague(
       roundLabel,
       venueId,
       notes,
+      leagueRefereeId: refRes.id,
       status: "scheduled",
     })
     .returning({ id: matches.id });
@@ -275,6 +305,11 @@ export async function updateMatchInLeague(
   }
   const { leagueTimezone, catId, venueId, roundLabel, notes } = core.data;
 
+  const refRes = await resolveLeagueRefereeIdForMatch(db, input.leagueId, input.leagueRefereeId);
+  if (!refRes.ok) {
+    return { ok: false, reason: refRes.reason };
+  }
+
   await db
     .update(matches)
     .set({
@@ -287,6 +322,7 @@ export async function updateMatchInLeague(
       roundLabel,
       venueId,
       notes,
+      leagueRefereeId: refRes.id,
       updatedAt: new Date(),
     })
     .where(eq(matches.id, input.matchId));

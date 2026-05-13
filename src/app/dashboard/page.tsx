@@ -8,6 +8,7 @@ import type {
   DashboardMyLeaguesState,
   MyLeaguesApiItem,
   MyLeaguesPlayerRow,
+  MyLeaguesRefereeRow,
   MyLeaguesTeamRow,
   MyLeaguesVenueRow,
 } from "@/components/dashboard/leagues/my-leagues-state";
@@ -23,6 +24,7 @@ type LeaguesMyApiResponse = {
   teams?: MyLeaguesTeamRow[];
   players?: MyLeaguesPlayerRow[];
   venues?: MyLeaguesVenueRow[];
+  referees?: MyLeaguesRefereeRow[];
   playersNextCursor?: string | null;
 };
 
@@ -80,6 +82,7 @@ export default function DashboardPage() {
           teams: data.teams ?? [],
           players: data.players ?? [],
           venues: data.venues ?? [],
+          referees: data.referees ?? [],
           playersNextCursor: data.playersNextCursor ?? null,
         });
       } catch {

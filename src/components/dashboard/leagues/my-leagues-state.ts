@@ -75,6 +75,9 @@ export type MyLeaguesMatchRow = {
   status: string;
   sportCode: string;
   notes: string | null;
+  /** Directorio `league_referees` (opcional). */
+  leagueRefereeId: string | null;
+  leagueRefereeFullName: string | null;
 };
 
 /** Fila de sedes / canchas (datos reales desde GET /api/leagues/my). */
@@ -88,6 +91,22 @@ export type MyLeaguesVenueRow = {
   badgeLabel: string;
   photoCount: number;
   hasAvailabilityNotes: boolean;
+};
+
+/** Árbitro de contacto por liga (`league_referees`). */
+export type MyLeaguesRefereeRow = {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  fullName: string;
+  whatsapp: string;
+  email: string | null;
+  /** Archivo CURP (`metadata.curp`). */
+  curpDownloadUrl: string | null;
+  /** Texto en columna legacy `curp`. */
+  curpLegacyText: string | null;
+  notes: string | null;
+  profileImageUrl: string | null;
 };
 
 /** Fila de plantilla / jugador (datos reales desde GET /api/leagues/my). */
@@ -117,6 +136,7 @@ export type DashboardMyLeaguesState =
       teams: readonly MyLeaguesTeamRow[];
       players: readonly MyLeaguesPlayerRow[];
       venues: readonly MyLeaguesVenueRow[];
+      referees: readonly MyLeaguesRefereeRow[];
       /** Paginación servidor (máx. 50 filas por carga); `null` si no hay más. */
       playersNextCursor: string | null;
     };

@@ -14,6 +14,8 @@ export const newMatchJsonSchema = z
     venueId: z.union([uuid, z.null()]).optional(),
     leagueCategoryId: z.union([uuid, z.null()]).optional(),
     notes: z.union([z.string().trim().max(2000), z.null()]).optional(),
+    /** Directorio `league_referees` (opcional). */
+    leagueRefereeId: z.union([uuid, z.null()]).optional(),
   })
   .superRefine((data, ctx) => {
     const t = Date.parse(data.scheduledAt);

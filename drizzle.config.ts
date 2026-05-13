@@ -1,10 +1,24 @@
+import { existsSync } from "node:fs";
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
 import { resolve } from "node:path";
 
-// So `drizzle-kit migrate` picks up DATABASE_URL without exporting it in the shell
-config({ path: resolve(process.cwd(), ".env") });
-config({ path: resolve(process.cwd(), ".env.local"), override: true });
+/** Misma cadena que `scripts/load-database-env.cjs` (Next.js). */
+function loadDatabaseEnvFiles(): void {
+  const root = process.cwd();
+  const isProd = process.env.NODE_ENV === "production";
+  const chain = isProd
+    ? [".env", ".env.local", ".env.production", ".env.production.local"]
+    : [".env", ".env.local", ".env.development", ".env.development.local"];
+  for (const name of chain) {
+    const p = resolve(root, name);
+    if (existsSync(p)) {
+      config({ path: p, override: true });
+    }
+  }
+}
+
+loadDatabaseEnvFiles();
 
 export default defineConfig({
   schema: "./src/db/schema.ts",

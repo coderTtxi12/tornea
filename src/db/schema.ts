@@ -385,6 +385,37 @@ export const venues = pgTable(
   (t) => [index("venues_league_id_idx").on(t.leagueId)],
 );
 
+/** Árbitros / cuerpo arbitral de contacto por liga (no es `users` ni `match_officials`). */
+export const leagueReferees = pgTable(
+  "league_referees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    fullName: text("full_name").notNull(),
+    /** WhatsApp en E164 (misma convención que `players.metadata.whatsappE164`). */
+    whatsapp: text("whatsapp").notNull(),
+    email: text("email"),
+    /** CURP alfanumérica opcional (hasta 18 caracteres). */
+    curp: text("curp"),
+    notes: text("notes"),
+    /** Foto de perfil: `metadata.photo` = `{ bucket, path, publicUrl }` (igual que jugadores). */
+    metadata: jsonb("metadata").notNull().default({}),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("league_referees_league_id_idx").on(t.leagueId),
+    index("league_referees_league_sort_idx").on(t.leagueId, t.sortOrder),
+  ],
+);
+
 export const seasons = pgTable(
   "seasons",
   {
@@ -583,6 +614,10 @@ export const matches = pgTable(
     venueId: uuid("venue_id").references(() => venues.id, {
       onDelete: "set null",
     }),
+    /** Árbitro de contacto del directorio (`league_referees`), opcional. */
+    leagueRefereeId: uuid("league_referee_id").references(() => leagueReferees.id, {
+      onDelete: "set null",
+    }),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     timezone: text("timezone").notNull().default("America/Guayaquil"),
     homeTeamId: uuid("home_team_id")
@@ -621,6 +656,7 @@ export const matches = pgTable(
     index("matches_home_team_id_idx").on(t.homeTeamId),
     index("matches_away_team_id_idx").on(t.awayTeamId),
     index("matches_league_category_id_idx").on(t.leagueCategoryId),
+    index("matches_league_referee_id_idx").on(t.leagueRefereeId),
   ],
 );
 
@@ -1148,9 +1184,17 @@ export const leaguesRelations = relations(leagues, ({ one, many }) => ({
   }),
   members: many(leagueMembers),
   venues: many(venues),
+  leagueReferees: many(leagueReferees),
   seasons: many(seasons),
   teams: many(teams),
   auditLogs: many(appAuditLogs),
+}));
+
+export const leagueRefereesRelations = relations(leagueReferees, ({ one }) => ({
+  league: one(leagues, {
+    fields: [leagueReferees.leagueId],
+    references: [leagues.id],
+  }),
 }));
 
 export const appAuditLogsRelations = relations(appAuditLogs, ({ one }) => ({

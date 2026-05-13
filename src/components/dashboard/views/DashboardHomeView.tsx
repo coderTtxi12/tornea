@@ -52,7 +52,7 @@ export function DashboardHomeView() {
                 </span>
                 <span className="text-brand-teal flex items-center gap-1.5 text-[11px] font-semibold">
                   <span className="bg-brand-lime size-1.5 rounded-full motion-safe:animate-pulse" />
-                  En vivo · mock
+                  En vivo
                 </span>
               </div>
               <div>
@@ -140,7 +140,7 @@ export function DashboardHomeView() {
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className={`${floatCard} p-5 lg:col-span-5`}>
           <h3 className="text-foreground-muted text-xs font-bold tracking-wide uppercase">
-            Tabla · mock
+            Leaderboard
           </h3>
           <ul className="mt-3 space-y-2">
             {standingsPreview.map((row) => (

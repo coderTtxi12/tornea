@@ -196,7 +196,7 @@ export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
         <div className="border-border border-b px-4 py-3">
           <h2 className="text-sm font-bold">Agenda y pendientes</h2>
           <p className="text-foreground-muted mt-0.5 text-[11px] leading-snug">
-            Próximos partidos · actividad y pendientes desde tu liga
+            Próximos partidos · actividad y pendientes de tus ligas
           </p>
         </div>
 

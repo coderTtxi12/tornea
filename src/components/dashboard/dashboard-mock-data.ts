@@ -39,7 +39,7 @@ export type MockLeague = {
 export const MOCK_LEAGUES: MockLeague[] = [
   {
     id: "l-1",
-    name: "Liga Barrial Norte",
+    name: "Liga Nacional de Fútbol",
     sportLabel: "Fútbol",
     seasonLabel: "Clausura 2026",
     status: "active",
@@ -89,7 +89,7 @@ export const MOCK_LEAGUES: MockLeague[] = [
   },
   {
     id: "l-2",
-    name: "Copa Empresarial Quito",
+    name: "Copa Regional",
     sportLabel: "Fútbol 7",
     seasonLabel: "Edición invierno",
     status: "active",
@@ -134,7 +134,7 @@ export const MOCK_LEAGUES: MockLeague[] = [
     id: "l-3",
     name: "Escuelas formativas U-15",
     sportLabel: "Fútbol",
-    seasonLabel: "Apertura (borrador)",
+    seasonLabel: "Apertura",
     status: "draft",
     stats: {
       matchesPlayed: 0,

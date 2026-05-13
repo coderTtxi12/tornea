@@ -65,6 +65,8 @@ export function DashboardFixtureView({
           rows: raw.map((m) => ({
             ...m,
             notes: m.notes ?? null,
+            leagueRefereeId: m.leagueRefereeId ?? null,
+            leagueRefereeFullName: m.leagueRefereeFullName ?? null,
           })),
         });
       } catch {

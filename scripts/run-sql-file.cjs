@@ -5,17 +5,11 @@
  */
 const path = require("node:path");
 const fs = require("node:fs");
-const { config } = require("dotenv");
 const { Client } = require("pg");
 
 const root = path.resolve(__dirname, "..");
-
-for (const file of [".env", ".env.local"]) {
-  const p = path.join(root, file);
-  if (fs.existsSync(p)) {
-    config({ path: p, override: file === ".env.local" });
-  }
-}
+const { loadDatabaseEnv } = require("./load-database-env.cjs");
+loadDatabaseEnv(root);
 
 const url = process.env.DATABASE_URL?.trim();
 if (!url) {

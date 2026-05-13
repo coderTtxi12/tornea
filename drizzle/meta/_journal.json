@@ -92,6 +92,20 @@
       "when": 1776086600000,
       "tag": "0012_matches_football_columns_if_missing",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776086700000,
+      "tag": "0013_league_referees",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776086800000,
+      "tag": "0014_matches_league_referee_id",
+      "breakpoints": true
     }
   ]
 }

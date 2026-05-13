@@ -2,21 +2,14 @@
 /**
  * Comprueba si existe `players.metadata` en la base apuntada por DATABASE_URL.
  * Si falta pero `npm run db:migrate` dice que no hay nada pendiente, Next y migrate
- * están usando distintas URLs (revisá .env vs .env.local).
+ * están usando distintas URLs (revisá .env.development.local vs .env).
  */
-const fs = require("node:fs");
 const path = require("node:path");
-const { config } = require("dotenv");
 const { Client } = require("pg");
 
 const root = path.resolve(__dirname, "..");
-
-for (const file of [".env", ".env.local"]) {
-  const p = path.join(root, file);
-  if (fs.existsSync(p)) {
-    config({ path: p, override: file === ".env.local" });
-  }
-}
+const { loadDatabaseEnv } = require("./load-database-env.cjs");
+loadDatabaseEnv(root);
 
 const url = process.env.DATABASE_URL?.trim();
 if (!url) {
@@ -54,7 +47,7 @@ async function main() {
     console.error(
       "[check-players-metadata] FALTA la columna public.players.metadata.\n" +
         "  → Ejecutá: npm run db:migrate\n" +
-        "  → Asegurate de que sea la misma DATABASE_URL que usa `next dev` (mismo .env.local).",
+        "  → Asegurate de que sea la misma DATABASE_URL que usa `next dev` (misma cadena de .env que `scripts/load-database-env.cjs`).",
     );
     process.exit(2);
   } finally {

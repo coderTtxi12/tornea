@@ -30,6 +30,7 @@ flowchart TB
   season_teams[season_teams]
   players[players]
   venues[venues]
+  league_referees[league_referees]
   matches[matches]
 
   users --> dashboard_access_requests
@@ -46,6 +47,7 @@ flowchart TB
   leagues --> seasons
   leagues --> teams
   leagues --> venues
+  leagues --> league_referees
   leagues --> players
   seasons --> season_teams
   teams --> season_teams
@@ -62,6 +64,8 @@ flowchart TB
 - **`leagues`:** Top-level organization (“tenant” for a competition).
 - **`seasons`:** Competition edition under a league.
 - **`teams`:** Clubs registered in a league; enrollment per season via **`season_teams`**.
+- **`venues`:** Sedes / canchas por liga (`venues`).
+- **`league_referees`:** Directorio de árbitros de contacto por liga (no reemplaza **`match_officials`**).
 - **`matches`:** Always tied to a **`season_id`**, with **`home_team_id`** and **`away_team_id`**.
 
 ---
@@ -396,6 +400,26 @@ Playing venues owned by a league.
 | `is_active` | boolean NOT NULL DEFAULT true | Soft disable. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
+
+### `league_referees`
+
+Contact directory for **referees / match officials** at league level (not `users` rows; separate from **`match_officials`**, which assigns app users to a specific match).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid PK | Referee row id. |
+| `league_id` | uuid FK → `leagues.id` | Owning league (cascade delete). |
+| `full_name` | text NOT NULL | Display name. |
+| `whatsapp` | text NOT NULL | WhatsApp in **E164** (same convention as `players.metadata.whatsappE164`). |
+| `email` | text | Optional email. |
+| `curp` | text | Optional CURP string (18 alphanumeric). |
+| `notes` | text | Optional free-text notes. |
+| `metadata` | jsonb NOT NULL DEFAULT `{}` | **Convention (app):** optional `photo` — Storage ref `{ bucket, path, publicUrl }` (same shape as player profile photo). |
+| `sort_order` | integer NOT NULL DEFAULT 0 | Display order within the league. |
+| `created_at` | timestamptz NOT NULL | Creation time. |
+| `updated_at` | timestamptz NOT NULL | Last update. |
+
+Indexes: `league_id`; (`league_id`, `sort_order`).
 
 ### `seasons`
 

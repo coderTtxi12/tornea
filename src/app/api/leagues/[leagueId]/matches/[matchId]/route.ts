@@ -39,6 +39,11 @@ function mapUpdateError(
       return { status: 400, message: "Categoría inválida para esta liga." };
     case "bad_teams_league":
       return { status: 400, message: "Uno o ambos equipos no pertenecen a esta liga." };
+    case "bad_league_referee":
+      return {
+        status: 400,
+        message: "El árbitro elegido no pertenece a esta liga o no existe.",
+      };
     default:
       return { status: 400, message: "No se pudo actualizar el partido." };
   }
@@ -106,6 +111,7 @@ export async function PATCH(
       leagueCategoryId: d.leagueCategoryId ?? null,
       roundLabel: d.roundLabel ?? null,
       notes: d.notes ?? null,
+      leagueRefereeId: d.leagueRefereeId ?? null,
     });
 
     if (!result.ok) {

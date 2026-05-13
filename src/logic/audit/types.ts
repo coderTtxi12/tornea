@@ -21,6 +21,8 @@ export const AppAuditEntityType = {
   season: "season",
   match: "match",
   venue: "venue",
+  /** Árbitro de contacto en `league_referees` (directorio por liga). */
+  leagueReferee: "league_referee",
   sanction: "sanction",
   leagueMember: "league_member",
 } as const;

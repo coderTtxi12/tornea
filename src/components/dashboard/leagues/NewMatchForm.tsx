@@ -6,6 +6,7 @@ import { newMatchJsonSchema } from "./new-match-form-schema";
 import type {
   MyLeaguesApiItem,
   MyLeaguesMatchRow,
+  MyLeaguesRefereeRow,
   MyLeaguesVenueRow,
 } from "./my-leagues-state";
 
@@ -19,6 +20,7 @@ type SeasonTeamRow = {
 type NewMatchFormProps = {
   leagues: readonly MyLeaguesApiItem[];
   venues: readonly MyLeaguesVenueRow[];
+  referees: readonly MyLeaguesRefereeRow[];
   onClose: () => void;
   onMatchCreated?: () => void;
   onBusyChange?: (busy: boolean) => void;
@@ -107,6 +109,7 @@ function roundStateFromStoredLabel(
 export function NewMatchForm({
   leagues,
   venues,
+  referees,
   onClose,
   onMatchCreated,
   onBusyChange,
@@ -114,7 +117,9 @@ export function NewMatchForm({
 }: NewMatchFormProps) {
   const isEdit = Boolean(editRow);
 
-  const [leagueId, setLeagueId] = useState(() => editRow?.leagueId ?? leagues[0]?.id ?? "");
+  const [leagueId, setLeagueId] = useState(
+    () => editRow?.leagueId ?? (leagues.length === 1 ? leagues[0]!.id : ""),
+  );
   const selectedLeague = useMemo(
     () => leagues.find((l) => l.id === leagueId) ?? null,
     [leagueId, leagues],
@@ -122,12 +127,8 @@ export function NewMatchForm({
 
   const [seasonId, setSeasonId] = useState(() => {
     if (editRow) return editRow.seasonId;
-    const L = leagues[0];
-    if (!L?.seasons.length) return "";
-    if (L.primarySeasonId && L.seasons.some((s) => s.id === L.primarySeasonId)) {
-      return L.primarySeasonId;
-    }
-    return L.seasons[0]?.id ?? "";
+    if (leagues.length !== 1) return "";
+    return defaultSeasonIdForLeague(leagues[0]!);
   });
 
   const [matchCategoryId, setMatchCategoryId] = useState(() => editRow?.leagueCategoryId ?? "");
@@ -158,6 +159,18 @@ export function NewMatchForm({
     editRow ? roundStateFromStoredLabel(editRow.roundLabel).custom : "",
   );
 
+  const [leagueRefereeId, setLeagueRefereeId] = useState(
+    () => editRow?.leagueRefereeId ?? "",
+  );
+
+  const refereesForLeague = useMemo(() => {
+    if (!leagueId) return [];
+    return referees
+      .filter((r) => r.leagueId === leagueId)
+      .slice()
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "es"));
+  }, [referees, leagueId]);
+
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -171,6 +184,14 @@ export function NewMatchForm({
       onBusyChange?.(false);
     };
   }, [onBusyChange]);
+
+  useEffect(() => {
+    if (isEdit || !selectedLeague?.seasons.length) return;
+    if (selectedLeague.seasons.length === 1) {
+      const only = selectedLeague.seasons[0]!.id;
+      if (seasonId !== only) setSeasonId(only);
+    }
+  }, [isEdit, selectedLeague, seasonId]);
 
   useEffect(() => {
     if (!leagueId || !seasonId) {
@@ -231,6 +252,7 @@ export function NewMatchForm({
     setSeasonTeams([]);
     setTeamsLoad("idle");
     setTeamsError(null);
+    setLeagueRefereeId("");
   }
 
   const visibleTeams = useMemo(() => {
@@ -257,12 +279,18 @@ export function NewMatchForm({
     setRoundLabelCustom("");
     setFieldErrors({});
     setSubmitError(null);
+    setLeagueRefereeId("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
     setSubmitError(null);
+
+    if (!isEdit && !leagueId.trim()) {
+      setFieldErrors({ leagueId: "Elegí una liga." });
+      return;
+    }
 
     if (!scheduledDate.trim()) {
       setFieldErrors({ scheduledAt: "Indica la fecha del partido." });
@@ -310,6 +338,7 @@ export function NewMatchForm({
       venueId: venueId.trim() ? venueId.trim() : null,
       leagueCategoryId: matchCategoryId.trim() ? matchCategoryId.trim() : null,
       notes: notes.trim() ? notes.trim() : null,
+      leagueRefereeId: leagueRefereeId.trim() ? leagueRefereeId.trim() : null,
     };
 
     const parsed = newMatchJsonSchema.safeParse(body);
@@ -388,13 +417,13 @@ export function NewMatchForm({
           </>
         ) : (
           <>
-            El partido se guarda en <code className="text-foreground-muted text-xs">matches</code>{" "}
-            con <code className="text-foreground-muted text-xs">season_id</code>. Ambos equipos deben
-            estar dados de alta en la temporada en{" "}
-            <code className="text-foreground-muted text-xs">season_teams</code>. La hora se toma
-            según tu navegador y en la base también queda el{" "}
-            <code className="text-foreground-muted text-xs">timezone</code> de la liga (
-            {selectedLeague?.timezone ?? "—"}).
+            Primero elegís la <span className="text-foreground font-medium">liga</span>: las
+            categorías salen de esa liga. El partido se
+            guarda en <code className="text-foreground-muted text-xs">matches</code> con{" "}
+            <code className="text-foreground-muted text-xs">season_id</code> (si hay varias
+            temporadas, elegís cuál). Equipos validados en{" "}
+            <code className="text-foreground-muted text-xs">season_teams</code>. Zona horaria:{" "}
+            <code className="text-foreground-muted text-xs">{selectedLeague?.timezone ?? "—"}</code>.
           </>
         )}
       </p>
@@ -406,15 +435,22 @@ export function NewMatchForm({
           </div>
         ) : null}
 
-        {leagues.length > 1 && !isEdit ? (
+        {!isEdit && leagues.length > 0 ? (
           <label className="block">
-            <span className="text-foreground-muted text-xs font-medium">Liga</span>
+            <span className="text-foreground-muted text-xs font-medium">
+              Liga <span className="text-brand-purple">*</span>
+            </span>
             <div className="relative mt-1">
               <select
                 value={leagueId}
                 onChange={(e) => handleLeagueChange(e.target.value)}
-                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2"
+                required
+                disabled={submitting}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-invalid={!!fieldErrors.leagueId}
+                aria-required
               >
+                {leagues.length > 1 ? <option value="">Elegí una liga…</option> : null}
                 {leagues.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -438,59 +474,125 @@ export function NewMatchForm({
                 </svg>
               </span>
             </div>
+            {fieldErrors.leagueId ? (
+              <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.leagueId}</span>
+            ) : null}
           </label>
+        ) : isEdit ? (
+          <p className="text-foreground-muted text-sm">
+            Liga: <span className="text-foreground font-medium">{editRow!.leagueName}</span>
+          </p>
         ) : null}
 
-        <label className="block">
-          <span className="text-foreground-muted text-xs font-medium">Temporada</span>
-          <div className="relative mt-1">
-            <select
-              value={seasonId}
-              onChange={(e) => {
-                setSeasonId(e.target.value);
-                setHomeTeamId("");
-                setAwayTeamId("");
-                setSeasonTeams([]);
-                setTeamsLoad("loading");
-                setTeamsError(null);
-              }}
-              disabled={noSeasons}
-              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {noSeasons ? (
-                <option value="">Sin temporadas</option>
-              ) : (
-                selectedLeague!.seasons.map((s) => (
+        {!isEdit && selectedLeague && selectedLeague.seasons.length > 1 ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">
+              Temporada <span className="text-brand-purple">*</span>
+            </span>
+            <div className="relative mt-1">
+              <select
+                value={seasonId}
+                onChange={(e) => {
+                  setSeasonId(e.target.value);
+                  setHomeTeamId("");
+                  setAwayTeamId("");
+                  setSeasonTeams([]);
+                  setTeamsLoad("loading");
+                  setTeamsError(null);
+                }}
+                required
+                disabled={noSeasons || submitting}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {selectedLeague.seasons.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                     {s.status === "in_progress" ? " · en curso" : ""}
                   </option>
-                ))
-              )}
-            </select>
-            <span
-              className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
-              aria-hidden
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="opacity-70"
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
               >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+          </label>
+        ) : !isEdit && selectedLeague && selectedLeague.seasons.length === 1 ? (
+          <p className="text-foreground-muted text-sm">
+            Temporada:{" "}
+            <span className="text-foreground font-medium">
+              {selectedLeague.seasons[0]!.name}
+              {selectedLeague.seasons[0]!.status === "in_progress" ? " · en curso" : ""}
             </span>
-          </div>
-          {noSeasons ? (
-            <span className="text-brand-purple mt-1 block text-xs">
-              No hay temporadas en esta liga. Registra un equipo para crear la primera.
-            </span>
-          ) : null}
-        </label>
+          </p>
+        ) : isEdit ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">Temporada</span>
+            <div className="relative mt-1">
+              <select
+                value={seasonId}
+                onChange={(e) => {
+                  setSeasonId(e.target.value);
+                  setHomeTeamId("");
+                  setAwayTeamId("");
+                  setSeasonTeams([]);
+                  setTeamsLoad("loading");
+                  setTeamsError(null);
+                }}
+                disabled={noSeasons}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {noSeasons ? (
+                  <option value="">Sin temporadas</option>
+                ) : (
+                  selectedLeague!.seasons.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                      {s.status === "in_progress" ? " · en curso" : ""}
+                    </option>
+                  ))
+                )}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+            {noSeasons ? (
+              <span className="text-brand-purple mt-1 block text-xs">
+                No hay temporadas en esta liga. Registra un equipo para crear la primera.
+              </span>
+            ) : null}
+          </label>
+        ) : !isEdit && leagueId && noSeasons ? (
+          <p className="text-brand-purple text-sm">
+            No hay temporadas en esta liga. Registra un equipo para crear la primera.
+          </p>
+        ) : null}
 
         {selectedLeague && selectedLeague.categories.length > 0 ? (
           <label className="block">
@@ -535,6 +637,47 @@ export function NewMatchForm({
             <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
               Si eliges categoría, solo verás equipos inscritos en esa categoría en la temporada; el
               partido guarda <code className="text-foreground-muted">league_category_id</code>.
+            </span>
+          </label>
+        ) : null}
+
+        {leagueId ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">Árbitro (opcional)</span>
+            <div className="relative mt-1">
+              <select
+                value={leagueRefereeId}
+                onChange={(e) => setLeagueRefereeId(e.target.value)}
+                disabled={submitting || !leagueId}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">— Sin árbitro asignado —</option>
+                {refereesForLeague.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.fullName}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+            <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+              Directorio <code className="text-foreground-muted">league_referees</code> de esta
+              liga. Opcional; se guarda en <code className="text-foreground-muted">matches.league_referee_id</code>.
             </span>
           </label>
         ) : null}
@@ -839,7 +982,13 @@ export function NewMatchForm({
           <button
             type="submit"
             className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-            disabled={submitting || noSeasons || teamsLoad === "loading" || visibleTeams.length < 2}
+            disabled={
+              submitting ||
+              noSeasons ||
+              teamsLoad === "loading" ||
+              visibleTeams.length < 2 ||
+              (!isEdit && !leagueId.trim())
+            }
           >
             {submitting ? "Guardando…" : isEdit ? "Guardar cambios" : "Programar partido"}
           </button>

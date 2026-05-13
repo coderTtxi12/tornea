@@ -4,6 +4,7 @@ import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { listOwnedLeaguesOrganizationCards } from "@/logic/leagues/list-owned-league-org-cards";
 import { listOwnedPlayerDashboardRowsPage } from "@/logic/leagues/list-owned-player-dashboard-rows";
 import { listOwnedTeamDashboardRows } from "@/logic/leagues/list-owned-team-dashboard-rows";
+import { listOwnedRefereeDashboardRows } from "@/logic/leagues/list-owned-referee-dashboard-rows";
 import { listOwnedVenueDashboardRows } from "@/logic/leagues/list-owned-venue-dashboard-rows";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,11 +23,12 @@ export async function GET() {
     }
 
     const appUser = await syncAppUserFromSupabaseAuthUser(user);
-    const [leagues, teams, playersPage, venues] = await Promise.all([
+    const [leagues, teams, playersPage, venues, referees] = await Promise.all([
       listOwnedLeaguesOrganizationCards(appUser.id),
       listOwnedTeamDashboardRows(appUser.id),
       listOwnedPlayerDashboardRowsPage(appUser.id),
       listOwnedVenueDashboardRows(appUser.id),
+      listOwnedRefereeDashboardRows(appUser.id),
     ]);
 
     return NextResponse.json({
@@ -35,6 +37,7 @@ export async function GET() {
       players: playersPage.rows,
       playersNextCursor: playersPage.nextCursor,
       venues,
+      referees,
     });
   } catch (e) {
     console.error("[GET /api/leagues/my]", e);

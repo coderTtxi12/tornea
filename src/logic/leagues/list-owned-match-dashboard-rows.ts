@@ -1,9 +1,10 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/db/client";
 import {
   leagueCategories,
+  leagueReferees,
   leagues,
   matches,
   seasons,
@@ -12,6 +13,26 @@ import {
 } from "@/db/schema";
 
 import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
+
+function pgErrorCode(err: unknown): string | undefined {
+  let cur: unknown = err;
+  for (let depth = 0; depth < 8 && cur != null; depth++) {
+    if (
+      typeof cur === "object" &&
+      cur !== null &&
+      "code" in cur &&
+      typeof (cur as { code: unknown }).code === "string"
+    ) {
+      return (cur as { code: string }).code;
+    }
+    if (typeof cur === "object" && cur !== null && "cause" in cur) {
+      cur = (cur as { cause: unknown }).cause;
+    } else {
+      break;
+    }
+  }
+  return undefined;
+}
 
 export type OwnedMatchDashboardRow = {
   id: string;
@@ -34,6 +55,8 @@ export type OwnedMatchDashboardRow = {
   status: string;
   sportCode: string;
   notes: string | null;
+  leagueRefereeId: string | null;
+  leagueRefereeFullName: string | null;
 };
 
 function iso(d: Date | string): string {
@@ -63,6 +86,8 @@ function mapRow(r: {
   venueId: string | null;
   venueName: string | null;
   notes: string | null;
+  leagueRefereeId: string | null;
+  leagueRefereeFullName: string | null;
 }): OwnedMatchDashboardRow {
   return {
     id: r.id,
@@ -85,6 +110,8 @@ function mapRow(r: {
     status: r.status,
     sportCode: r.sportCode,
     notes: r.notes?.trim() ? r.notes.trim() : null,
+    leagueRefereeId: r.leagueRefereeId ?? null,
+    leagueRefereeFullName: r.leagueRefereeFullName?.trim() ? r.leagueRefereeFullName.trim() : null,
   };
 }
 
@@ -105,38 +132,87 @@ export async function listOwnedMatchDashboardAll(
   const away = alias(teams, "fixture_match_away");
   const whereClause = inArray(leagues.id, leagueIdsManaged);
 
-  const rows = await db
-    .select({
-      id: matches.id,
-      scheduledAt: matches.scheduledAt,
-      timezone: matches.timezone,
-      matchday: matches.matchday,
-      roundLabel: matches.roundLabel,
-      status: matches.status,
-      sportCode: leagues.sportCode,
-      leagueCategoryId: matches.leagueCategoryId,
-      categoryName: leagueCategories.name,
-      seasonId: seasons.id,
-      seasonName: seasons.name,
-      leagueId: leagues.id,
-      leagueName: leagues.name,
-      homeTeamId: home.id,
-      homeTeamName: home.name,
-      awayTeamId: away.id,
-      awayTeamName: away.name,
-      venueId: matches.venueId,
-      venueName: venues.name,
-      notes: matches.notes,
-    })
-    .from(matches)
-    .innerJoin(seasons, eq(matches.seasonId, seasons.id))
-    .innerJoin(leagues, eq(seasons.leagueId, leagues.id))
-    .innerJoin(home, eq(matches.homeTeamId, home.id))
-    .innerJoin(away, eq(matches.awayTeamId, away.id))
-    .leftJoin(venues, eq(matches.venueId, venues.id))
-    .leftJoin(leagueCategories, eq(matches.leagueCategoryId, leagueCategories.id))
-    .where(whereClause)
-    .orderBy(asc(matches.scheduledAt), asc(matches.id));
+  try {
+    const rows = await db
+      .select({
+        id: matches.id,
+        scheduledAt: matches.scheduledAt,
+        timezone: matches.timezone,
+        matchday: matches.matchday,
+        roundLabel: matches.roundLabel,
+        status: matches.status,
+        sportCode: leagues.sportCode,
+        leagueCategoryId: matches.leagueCategoryId,
+        categoryName: leagueCategories.name,
+        seasonId: seasons.id,
+        seasonName: seasons.name,
+        leagueId: leagues.id,
+        leagueName: leagues.name,
+        homeTeamId: home.id,
+        homeTeamName: home.name,
+        awayTeamId: away.id,
+        awayTeamName: away.name,
+        venueId: matches.venueId,
+        venueName: venues.name,
+        notes: matches.notes,
+        leagueRefereeId: matches.leagueRefereeId,
+        leagueRefereeFullName: leagueReferees.fullName,
+      })
+      .from(matches)
+      .innerJoin(seasons, eq(matches.seasonId, seasons.id))
+      .innerJoin(leagues, eq(seasons.leagueId, leagues.id))
+      .innerJoin(home, eq(matches.homeTeamId, home.id))
+      .innerJoin(away, eq(matches.awayTeamId, away.id))
+      .leftJoin(venues, eq(matches.venueId, venues.id))
+      .leftJoin(leagueCategories, eq(matches.leagueCategoryId, leagueCategories.id))
+      .leftJoin(leagueReferees, eq(matches.leagueRefereeId, leagueReferees.id))
+      .where(whereClause)
+      .orderBy(asc(matches.scheduledAt), asc(matches.id));
 
-  return rows.map(mapRow);
+    return rows.map(mapRow);
+  } catch (e) {
+    /** Migración `0014_matches_league_referee_id` pendiente: misma situación que tabla inexistente. */
+    if (pgErrorCode(e) === "42703") {
+      console.warn(
+        "[listOwnedMatchDashboardAll] Columna matches.league_referee_id inexistente; devolvé fixture sin árbitro hasta `npm run db:migrate` o `npm run db:ensure:matches-league-referee`.",
+      );
+      const rows = await db
+        .select({
+          id: matches.id,
+          scheduledAt: matches.scheduledAt,
+          timezone: matches.timezone,
+          matchday: matches.matchday,
+          roundLabel: matches.roundLabel,
+          status: matches.status,
+          sportCode: leagues.sportCode,
+          leagueCategoryId: matches.leagueCategoryId,
+          categoryName: leagueCategories.name,
+          seasonId: seasons.id,
+          seasonName: seasons.name,
+          leagueId: leagues.id,
+          leagueName: leagues.name,
+          homeTeamId: home.id,
+          homeTeamName: home.name,
+          awayTeamId: away.id,
+          awayTeamName: away.name,
+          venueId: matches.venueId,
+          venueName: venues.name,
+          notes: matches.notes,
+          leagueRefereeId: sql<string | null>`null::uuid`,
+          leagueRefereeFullName: sql<string | null>`null::text`,
+        })
+        .from(matches)
+        .innerJoin(seasons, eq(matches.seasonId, seasons.id))
+        .innerJoin(leagues, eq(seasons.leagueId, leagues.id))
+        .innerJoin(home, eq(matches.homeTeamId, home.id))
+        .innerJoin(away, eq(matches.awayTeamId, away.id))
+        .leftJoin(venues, eq(matches.venueId, venues.id))
+        .leftJoin(leagueCategories, eq(matches.leagueCategoryId, leagueCategories.id))
+        .where(whereClause)
+        .orderBy(asc(matches.scheduledAt), asc(matches.id));
+
+      return rows.map(mapRow);
+    }
+    throw e;
+  }
 }
