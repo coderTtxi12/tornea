@@ -52,7 +52,7 @@ export type MyLeaguesTeamRow = {
   crestUrl: string | null;
 };
 
-/** Fila de fixture / partidos (GET /api/leagues/my/matches). */
+/** Fila de fixture / partidos (GET /api/leagues/my/matches — lista completa; filtro/orden en cliente). */
 export type MyLeaguesMatchRow = {
   id: string;
   leagueId: string;
@@ -74,6 +74,7 @@ export type MyLeaguesMatchRow = {
   categoryName: string | null;
   status: string;
   sportCode: string;
+  notes: string | null;
 };
 
 /** Fila de sedes / canchas (datos reales desde GET /api/leagues/my). */

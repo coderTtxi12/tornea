@@ -1,15 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  or,
-  type InferSelectModel,
-  type SQL,
-} from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/db/client";
@@ -23,10 +12,6 @@ import {
 } from "@/db/schema";
 
 import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
-
-const CATEGORY_NONE_LABEL = "Sin categoría";
-
-type MatchRowStatus = InferSelectModel<typeof matches>["status"];
 
 export type OwnedMatchDashboardRow = {
   id: string;
@@ -48,20 +33,7 @@ export type OwnedMatchDashboardRow = {
   categoryName: string | null;
   status: string;
   sportCode: string;
-};
-
-export type OwnedMatchDashboardListFilters = {
-  leagueNames: string[];
-  seasonNames: string[];
-  /** Códigos `match_status`. */
-  statuses: string[];
-  /** Etiquetas de categoría; incluye «Sin categoría» para `league_category_id` nulo. */
-  categoryNames: string[];
-};
-
-export type OwnedMatchDashboardListSort = {
-  key: "kickoff" | "matchup";
-  dir: "asc" | "desc";
+  notes: string | null;
 };
 
 function iso(d: Date | string): string {
@@ -90,6 +62,7 @@ function mapRow(r: {
   awayTeamName: string;
   venueId: string | null;
   venueName: string | null;
+  notes: string | null;
 }): OwnedMatchDashboardRow {
   return {
     id: r.id,
@@ -111,93 +84,26 @@ function mapRow(r: {
     categoryName: r.categoryName ?? null,
     status: r.status,
     sportCode: r.sportCode,
+    notes: r.notes?.trim() ? r.notes.trim() : null,
   };
 }
 
-function buildWhereParts(
-  leagueIdsManaged: string[],
-  filters: OwnedMatchDashboardListFilters,
-): SQL[] {
-  const parts: SQL[] = [inArray(leagues.id, leagueIdsManaged)];
-
-  if (filters.leagueNames.length > 0) {
-    parts.push(inArray(leagues.name, filters.leagueNames));
-  }
-  if (filters.seasonNames.length > 0) {
-    parts.push(inArray(seasons.name, filters.seasonNames));
-  }
-  if (filters.statuses.length > 0) {
-    parts.push(inArray(matches.status, filters.statuses as MatchRowStatus[]));
-  }
-  if (filters.categoryNames.length > 0) {
-    const hasNone = filters.categoryNames.includes(CATEGORY_NONE_LABEL);
-    const namedOnly = filters.categoryNames.filter((c) => c !== CATEGORY_NONE_LABEL);
-    const catPreds: SQL[] = [];
-    if (namedOnly.length > 0) {
-      catPreds.push(inArray(leagueCategories.name, namedOnly));
-    }
-    if (hasNone) {
-      catPreds.push(isNull(matches.leagueCategoryId));
-    }
-    if (catPreds.length === 1) {
-      parts.push(catPreds[0]!);
-    } else if (catPreds.length === 2) {
-      parts.push(or(catPreds[0], catPreds[1])!);
-    }
-  }
-
-  return parts;
-}
-
 /**
- * Partidos paginados con filtros y orden en SQL (`matches` en ligas gestionadas).
+ * Todos los partidos en ligas gestionadas.
+ * El fixture aplica filtros, orden y paginación en el cliente.
  */
-export async function listOwnedMatchDashboardPage(
+export async function listOwnedMatchDashboardAll(
   ownerUserId: string,
-  opts: {
-    page: number;
-    pageSize: number;
-    sort: OwnedMatchDashboardListSort;
-    filters: OwnedMatchDashboardListFilters;
-  },
-): Promise<{ rows: OwnedMatchDashboardRow[]; total: number }> {
+): Promise<OwnedMatchDashboardRow[]> {
   const leagueIdsManaged = await listManagedLeagueIdsForDashboardUser(ownerUserId);
   if (leagueIdsManaged.length === 0) {
-    return { rows: [], total: 0 };
+    return [];
   }
-
-  const page = Math.max(1, opts.page);
-  const pageSize = Math.min(100, Math.max(1, opts.pageSize));
-  const offset = (page - 1) * pageSize;
 
   const db = getDb();
   const home = alias(teams, "fixture_match_home");
   const away = alias(teams, "fixture_match_away");
-
-  const whereClause = and(...buildWhereParts(leagueIdsManaged, opts.filters));
-
-  const baseFrom = db
-    .select({ n: count(matches.id) })
-    .from(matches)
-    .innerJoin(seasons, eq(matches.seasonId, seasons.id))
-    .innerJoin(leagues, eq(seasons.leagueId, leagues.id))
-    .innerJoin(home, eq(matches.homeTeamId, home.id))
-    .innerJoin(away, eq(matches.awayTeamId, away.id))
-    .leftJoin(venues, eq(matches.venueId, venues.id))
-    .leftJoin(leagueCategories, eq(matches.leagueCategoryId, leagueCategories.id))
-    .where(whereClause);
-
-  const [countRow] = await baseFrom;
-  const total = Number(countRow?.n ?? 0);
-
-  const orderByClause =
-    opts.sort.key === "kickoff"
-      ? opts.sort.dir === "asc"
-        ? [asc(matches.scheduledAt), asc(matches.id)]
-        : [desc(matches.scheduledAt), asc(matches.id)]
-      : opts.sort.dir === "asc"
-        ? [asc(home.name), asc(away.name), asc(matches.id)]
-        : [desc(home.name), desc(away.name), asc(matches.id)];
+  const whereClause = inArray(leagues.id, leagueIdsManaged);
 
   const rows = await db
     .select({
@@ -220,6 +126,7 @@ export async function listOwnedMatchDashboardPage(
       awayTeamName: away.name,
       venueId: matches.venueId,
       venueName: venues.name,
+      notes: matches.notes,
     })
     .from(matches)
     .innerJoin(seasons, eq(matches.seasonId, seasons.id))
@@ -229,9 +136,7 @@ export async function listOwnedMatchDashboardPage(
     .leftJoin(venues, eq(matches.venueId, venues.id))
     .leftJoin(leagueCategories, eq(matches.leagueCategoryId, leagueCategories.id))
     .where(whereClause)
-    .orderBy(...orderByClause)
-    .limit(pageSize)
-    .offset(offset);
+    .orderBy(asc(matches.scheduledAt), asc(matches.id));
 
-  return { rows: rows.map(mapRow), total };
+  return rows.map(mapRow);
 }

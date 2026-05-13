@@ -2,17 +2,72 @@
 
 import { useEffect, useState } from "react";
 
-import { MOCK_FIXTURE_ROWS } from "./dashboard-mock-data";
+import type { MyLeaguesMatchRow } from "@/components/dashboard/leagues/my-leagues-state";
+
 import { MockActionButton, floatCard } from "./views/dashboard-view-primitives";
 
-function matchStatusLabel(s: (typeof MOCK_FIXTURE_ROWS)[0]["matchStatus"]) {
-  const m: Record<typeof s, string> = {
+function startOfLocalDayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Partidos no cerrados a partir de hoy (hora local); «live» siempre. */
+function selectUpcomingRailMatches(rows: MyLeaguesMatchRow[]): MyLeaguesMatchRow[] {
+  const dayStart = startOfLocalDayMs();
+  const filtered = rows.filter((m) => {
+    if (m.status === "finished" || m.status === "cancelled") return false;
+    if (m.status === "live") return true;
+    const t = Date.parse(m.scheduledAt);
+    if (Number.isNaN(t)) return false;
+    return t >= dayStart;
+  });
+  filtered.sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
+  return filtered.slice(0, 4);
+}
+
+function formatRailKickoffParts(iso: string, timeZone: string): { dayLabel: string; time: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { dayLabel: "—", time: "—" };
+  const tz = timeZone?.trim();
+  const dateOpts: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: tz || undefined,
+  };
+  const timeOpts: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: tz || undefined,
+  };
+  try {
+    let dayLabel = d.toLocaleDateString("es-MX", dateOpts).replace(/\.$/, "");
+    if (dayLabel.length > 0) {
+      dayLabel = dayLabel.charAt(0).toLocaleUpperCase("es-MX") + dayLabel.slice(1);
+    }
+    const time = d.toLocaleTimeString("es-MX", timeOpts);
+    return { dayLabel, time };
+  } catch {
+    const dayLabel = d
+      .toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" })
+      .replace(/\.$/, "");
+    const time = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return { dayLabel: dayLabel || "—", time };
+  }
+}
+
+function matchStatusLabel(status: string): string {
+  const m: Record<string, string> = {
     scheduled: "Prog.",
     live: "En vivo",
     finished: "Final",
     postponed: "Aplaz.",
+    cancelled: "Canc.",
+    walkover: "WO",
   };
-  return m[s];
+  return m[status] ?? status.slice(0, 4).toUpperCase() + ".";
 }
 
 type RailApiRecent = {
@@ -37,46 +92,94 @@ type RailApiResponse = {
   pendingItems: RailApiPending[];
 };
 
-export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
-  const upcoming = MOCK_FIXTURE_ROWS.filter((r) => r.matchStatus !== "finished").slice(0, 4);
+type UpcomingState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; rows: MyLeaguesMatchRow[] };
 
+export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
   const [rail, setRail] = useState<RailApiResponse | null>(null);
   const [railError, setRailError] = useState<string | null>(null);
+  const [upcomingState, setUpcomingState] = useState<UpcomingState>({ status: "idle" });
 
   useEffect(() => {
     let cancelled = false;
     setRailError(null);
+    setUpcomingState({ status: "loading" });
     void (async () => {
       try {
-        const res = await fetch("/api/dashboard/rail", { credentials: "same-origin" });
+        const [railRes, matchesRes] = await Promise.all([
+          fetch("/api/dashboard/rail", { credentials: "same-origin" }),
+          fetch("/api/leagues/my/matches", { credentials: "same-origin", method: "GET" }),
+        ]);
         if (cancelled) return;
-        if (!res.ok) {
+
+        if (railRes.status === 401 || matchesRes.status === 401) {
+          window.location.href = "/";
+          return;
+        }
+
+        if (!railRes.ok) {
           setRail(null);
           setRailError("No se pudo cargar actividad.");
-          return;
+        } else {
+          const data = (await railRes.json()) as RailApiResponse;
+          if (cancelled) return;
+          if (
+            !Array.isArray(data.recentActivity) ||
+            !Array.isArray(data.pendingItems) ||
+            typeof data.managedLeagueCount !== "number" ||
+            data.recentActivity.some(
+              (x) =>
+                typeof x !== "object" ||
+                x === null ||
+                typeof (x as RailApiRecent).actorLabel !== "string",
+            )
+          ) {
+            setRail(null);
+            setRailError("Respuesta inválida.");
+          } else {
+            setRail(data);
+          }
         }
-        const data = (await res.json()) as RailApiResponse;
-        if (cancelled) return;
-        if (
-          !Array.isArray(data.recentActivity) ||
-          !Array.isArray(data.pendingItems) ||
-          typeof data.managedLeagueCount !== "number" ||
-          data.recentActivity.some(
+
+        if (!matchesRes.ok) {
+          if (!cancelled) {
+            setUpcomingState({
+              status: "error",
+              message: "No se pudieron cargar los próximos partidos.",
+            });
+          }
+        } else {
+          const raw = (await matchesRes.json()) as { matches?: unknown };
+          const list = Array.isArray(raw.matches) ? raw.matches : [];
+          const valid = list.every(
             (x) =>
-              typeof x !== "object" ||
-              x === null ||
-              typeof (x as RailApiRecent).actorLabel !== "string",
-          )
-        ) {
-          setRail(null);
-          setRailError("Respuesta inválida.");
-          return;
+              typeof x === "object" &&
+              x !== null &&
+              typeof (x as MyLeaguesMatchRow).id === "string" &&
+              typeof (x as MyLeaguesMatchRow).scheduledAt === "string" &&
+              typeof (x as MyLeaguesMatchRow).timezone === "string" &&
+              typeof (x as MyLeaguesMatchRow).homeTeamName === "string" &&
+              typeof (x as MyLeaguesMatchRow).awayTeamName === "string" &&
+              typeof (x as MyLeaguesMatchRow).status === "string",
+          );
+          if (cancelled) return;
+          if (!valid) {
+            setUpcomingState({ status: "error", message: "Respuesta de partidos inválida." });
+          } else {
+            setUpcomingState({
+              status: "ready",
+              rows: selectUpcomingRailMatches(list as MyLeaguesMatchRow[]),
+            });
+          }
         }
-        setRail(data);
       } catch {
         if (!cancelled) {
           setRail(null);
           setRailError("Error de red.");
+          setUpcomingState({ status: "error", message: "Error de red." });
         }
       }
     })();
@@ -93,7 +196,7 @@ export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
         <div className="border-border border-b px-4 py-3">
           <h2 className="text-sm font-bold">Agenda y pendientes</h2>
           <p className="text-foreground-muted mt-0.5 text-[11px] leading-snug">
-            Próximos partidos (demo) · actividad y pendientes desde tu liga
+            Próximos partidos · actividad y pendientes desde tu liga
           </p>
         </div>
 
@@ -102,29 +205,42 @@ export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
             <h3 className="text-foreground-muted px-1 pb-2 text-[10px] font-bold tracking-wide uppercase">
               Próximos partidos
             </h3>
-            <ul className="space-y-2">
-              {upcoming.map((m) => (
-                <li
-                  key={m.id}
-                  className="border-border bg-surface-code/25 rounded-brand-md border px-2.5 py-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-foreground-muted text-[10px] tabular-nums">
-                      {m.dayLabel} · {m.time}
-                    </span>
-                    <span
-                      className={`text-[9px] font-bold uppercase ${m.matchStatus === "live" ? "text-brand-lime" : "text-foreground-subtle"}`}
+            {upcomingState.status === "loading" || upcomingState.status === "idle" ? (
+              <p className="text-foreground-muted px-1 text-xs">Cargando…</p>
+            ) : upcomingState.status === "error" ? (
+              <p className="text-foreground-muted px-1 text-xs">{upcomingState.message}</p>
+            ) : upcomingState.rows.length === 0 ? (
+              <p className="text-foreground-muted px-1 text-xs">Sin partidos próximos.</p>
+            ) : (
+              <ul className="space-y-2">
+                {upcomingState.rows.map((m) => {
+                  const { dayLabel, time } = formatRailKickoffParts(m.scheduledAt, m.timezone);
+                  return (
+                    <li
+                      key={m.id}
+                      className="border-border bg-surface-code/25 rounded-brand-md border px-2.5 py-2"
                     >
-                      {matchStatusLabel(m.matchStatus)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs font-medium leading-tight">
-                    {m.home} vs {m.away}
-                  </p>
-                  <p className="text-foreground-subtle mt-0.5 text-[10px] leading-snug">{m.venue}</p>
-                </li>
-              ))}
-            </ul>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-foreground-muted text-[10px] tabular-nums">
+                          {dayLabel} · {time}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold uppercase ${m.status === "live" ? "text-brand-lime" : "text-foreground-subtle"}`}
+                        >
+                          {matchStatusLabel(m.status)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-medium leading-tight">
+                        {m.homeTeamName} vs {m.awayTeamName}
+                      </p>
+                      <p className="text-foreground-subtle mt-0.5 text-[10px] leading-snug">
+                        {m.venueName?.trim() ? m.venueName : "Sin sede"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
 
           {rail && rail.pendingItems.length > 0 ? (

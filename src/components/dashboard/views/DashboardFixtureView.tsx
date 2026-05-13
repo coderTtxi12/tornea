@@ -1,73 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { MyLeaguesMatchRow } from "@/components/dashboard/leagues/my-leagues-state";
 import {
   MatchesFilterableTable,
-  type MatchesFilterableTableFacets,
   type MatchesFilterableTableHandle,
-  type MatchesTableSortState,
-  MATCHES_TABLE_DEFAULT_SORT,
-  type MatchTableFilterColumn,
 } from "@/components/dashboard/tables/matches-filterable-table";
 import {
   DashboardViewHeader,
   MockActionButton,
 } from "./dashboard-view-primitives";
 
-const PAGE_SIZE = 20;
-
-type FacetsState =
-  | { status: "idle" }
-  | { status: "ready"; data: MatchesFilterableTableFacets }
-  | { status: "error" };
-
-type ListState =
+type MatchesLoadState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; rows: MyLeaguesMatchRow[]; total: number };
-
-function toggleInList(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
-}
+  | { status: "ready"; rows: MyLeaguesMatchRow[] };
 
 export function DashboardFixtureView({
   hasManagedLeagues,
   fixtureDataRefreshKey,
   onOpenNewMatchDrawer,
+  onOpenEditMatchDrawer,
 }: {
   hasManagedLeagues: boolean;
   /** Se incrementa al invalidar datos del panel (p. ej. tras crear partido). */
   fixtureDataRefreshKey: number;
   onOpenNewMatchDrawer: () => void;
+  onOpenEditMatchDrawer: (row: MyLeaguesMatchRow) => void;
 }) {
   const tableRef = useRef<MatchesFilterableTableHandle>(null);
   const [canClearTable, setCanClearTable] = useState(false);
-
-  const [facetsState, setFacetsState] = useState<FacetsState>({ status: "idle" });
-  const [listState, setListState] = useState<ListState>({ status: "idle" });
-
-  const [page, setPage] = useState(1);
-  const [sort, setSort] = useState<MatchesTableSortState>(MATCHES_TABLE_DEFAULT_SORT);
-  const [filterLeague, setFilterLeague] = useState<string[]>([]);
-  const [filterSeason, setFilterSeason] = useState<string[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterCategory, setFilterCategory] = useState<string[]>([]);
-
-  const buildListQuery = useCallback(() => {
-    const p = new URLSearchParams();
-    p.set("page", String(page));
-    p.set("pageSize", String(PAGE_SIZE));
-    p.set("sort", sort.key);
-    p.set("dir", sort.dir);
-    for (const x of filterLeague) p.append("league", x);
-    for (const x of filterSeason) p.append("season", x);
-    for (const x of filterStatus) p.append("status", x);
-    for (const x of filterCategory) p.append("category", x);
-    return p.toString();
-  }, [page, sort, filterLeague, filterSeason, filterStatus, filterCategory]);
+  const [matchesState, setMatchesState] = useState<MatchesLoadState>({ status: "idle" });
 
   useEffect(() => {
     if (!hasManagedLeagues) {
@@ -76,68 +41,35 @@ export function DashboardFixtureView({
 
     let cancelled = false;
     void (async () => {
-      setFacetsState({ status: "idle" });
-      setListState({ status: "loading" });
+      setMatchesState({ status: "loading" });
 
       try {
-        const [facRes, listRes] = await Promise.all([
-          fetch("/api/leagues/my/matches/facets", { method: "GET" }),
-          fetch(`/api/leagues/my/matches?${buildListQuery()}`, { method: "GET" }),
-        ]);
-
+        const res = await fetch("/api/leagues/my/matches", { method: "GET" });
         if (cancelled) return;
-
-        if (facRes.status === 401 || listRes.status === 401) {
+        if (res.status === 401) {
           window.location.href = "/";
           return;
         }
-
-        if (!facRes.ok) {
-          setFacetsState({ status: "error" });
-        } else {
-          const facJson = (await facRes.json()) as MatchesFilterableTableFacets;
-          if (!cancelled) {
-            setFacetsState({
-              status: "ready",
-              data: {
-                leagueNames: Array.isArray(facJson.leagueNames) ? facJson.leagueNames : [],
-                seasonNames: Array.isArray(facJson.seasonNames) ? facJson.seasonNames : [],
-                statuses: Array.isArray(facJson.statuses) ? facJson.statuses : [],
-                categoryLabels: Array.isArray(facJson.categoryLabels)
-                  ? facJson.categoryLabels
-                  : [],
-              },
-            });
-          }
-        }
-
-        if (!listRes.ok) {
-          if (!cancelled) {
-            setListState({
-              status: "error",
-              message: "No se pudieron cargar los partidos. Intenta de nuevo.",
-            });
-          }
+        if (!res.ok) {
+          setMatchesState({
+            status: "error",
+            message: "No se pudieron cargar los partidos. Intenta de nuevo.",
+          });
           return;
         }
-
-        const listJson = (await listRes.json()) as {
-          matches?: MyLeaguesMatchRow[];
-          total?: number;
-        };
+        const data = (await res.json()) as { matches?: MyLeaguesMatchRow[] };
         if (cancelled) return;
-        const listTotal = typeof listJson.total === "number" ? listJson.total : 0;
-        const maxP = Math.max(1, Math.ceil(listTotal / PAGE_SIZE));
-        setPage((p) => Math.min(p, maxP));
-        setListState({
+        const raw = data.matches ?? [];
+        setMatchesState({
           status: "ready",
-          rows: Array.isArray(listJson.matches) ? listJson.matches : [],
-          total: listTotal,
+          rows: raw.map((m) => ({
+            ...m,
+            notes: m.notes ?? null,
+          })),
         });
       } catch {
         if (!cancelled) {
-          setFacetsState({ status: "error" });
-          setListState({
+          setMatchesState({
             status: "error",
             message: "No se pudieron cargar los partidos. Intenta de nuevo.",
           });
@@ -148,57 +80,11 @@ export function DashboardFixtureView({
     return () => {
       cancelled = true;
     };
-  }, [hasManagedLeagues, fixtureDataRefreshKey, buildListQuery]);
+  }, [hasManagedLeagues, fixtureDataRefreshKey]);
 
-  const handleToggleFilter = useCallback((column: MatchTableFilterColumn, value: string) => {
-    setPage(1);
-    if (column === "league") {
-      setFilterLeague((prev) => toggleInList(prev, value));
-    } else if (column === "season") {
-      setFilterSeason((prev) => toggleInList(prev, value));
-    } else if (column === "status") {
-      setFilterStatus((prev) => toggleInList(prev, value));
-    } else {
-      setFilterCategory((prev) => toggleInList(prev, value));
-    }
-  }, []);
-
-  const handleClearColumnFilter = useCallback((column: MatchTableFilterColumn) => {
-    setPage(1);
-    if (column === "league") setFilterLeague([]);
-    else if (column === "season") setFilterSeason([]);
-    else if (column === "status") setFilterStatus([]);
-    else setFilterCategory([]);
-  }, []);
-
-  const handleClearAll = useCallback(() => {
-    setFilterLeague([]);
-    setFilterSeason([]);
-    setFilterStatus([]);
-    setFilterCategory([]);
-    setSort(MATCHES_TABLE_DEFAULT_SORT);
-    setPage(1);
-  }, []);
-
-  const handleSortChange = useCallback((next: MatchesTableSortState) => {
-    setSort(next);
-    setPage(1);
-  }, []);
-
-  const rows = listState.status === "ready" ? listState.rows : [];
-  const total = listState.status === "ready" ? listState.total : 0;
-  const hasFilters =
-    filterLeague.length +
-      filterSeason.length +
-      filterStatus.length +
-      filterCategory.length >
-    0;
-  const showTable =
-    hasManagedLeagues &&
-    listState.status === "ready" &&
-    facetsState.status === "ready" &&
-    (total > 0 || hasFilters);
-  const borrarFiltrosEnabled = showTable && canClearTable;
+  const rows = matchesState.status === "ready" ? matchesState.rows : [];
+  const tableVisible = hasManagedLeagues && matchesState.status === "ready" && rows.length > 0;
+  const borrarFiltrosEnabled = tableVisible && canClearTable;
 
   return (
     <>
@@ -239,41 +125,24 @@ export function DashboardFixtureView({
         <p className="text-foreground-muted text-sm">
           Cuando tengas una liga, aquí verás el calendario de partidos.
         </p>
-      ) : listState.status === "loading" || facetsState.status === "idle" ? (
+      ) : matchesState.status === "loading" ? (
         <p className="text-foreground-muted text-sm">Cargando partidos…</p>
-      ) : listState.status === "error" ? (
-        <p className="text-brand-purple text-sm">{listState.message}</p>
-      ) : facetsState.status === "error" ? (
-        <p className="text-brand-purple text-sm">
-          No se pudieron cargar las opciones de filtro. Recarga la página.
-        </p>
-      ) : total === 0 && !hasFilters ? (
+      ) : matchesState.status === "error" ? (
+        <p className="text-brand-purple text-sm">{matchesState.message}</p>
+      ) : rows.length === 0 ? (
         <p className="text-foreground-muted text-sm">
           Aún no hay partidos registrados. Usa &quot;Nuevo partido&quot; para programar el primero.
         </p>
-      ) : facetsState.status === "ready" ? (
+      ) : (
         <MatchesFilterableTable
           ref={tableRef}
           matchRows={rows}
-          facets={facetsState.data}
-          totalCount={total}
-          page={page}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-          sort={sort}
-          onSortChange={handleSortChange}
-          filterLeague={filterLeague}
-          filterSeason={filterSeason}
-          filterStatus={filterStatus}
-          filterCategory={filterCategory}
-          onToggleFilter={handleToggleFilter}
-          onClearColumnFilter={handleClearColumnFilter}
-          onRequestClearAll={handleClearAll}
           onHasActiveFiltersChange={setCanClearTable}
+          onEditMatch={onOpenEditMatchDrawer}
         />
-      ) : null}
+      )}
 
-      {showTable ? (
+      {tableVisible ? (
         <div className="mt-3 flex justify-end">
           <MockActionButton variant="ghost" className="!text-xs">
             Exportar PDF

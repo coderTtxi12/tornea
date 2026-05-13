@@ -110,14 +110,29 @@ function formatKickoff(iso: string, timeZone: string): string {
   }
 }
 
-export type MatchTableFilterColumn = "league" | "season" | "status" | "category";
-type FilterColumn = MatchTableFilterColumn;
+function cmpKickoff(isoA: string, isoB: string, dir: "asc" | "desc"): number {
+  const a = Date.parse(isoA);
+  const b = Date.parse(isoB);
+  const aNaN = Number.isNaN(a);
+  const bNaN = Number.isNaN(b);
+  if (aNaN && bNaN) return 0;
+  if (aNaN) return 1;
+  if (bNaN) return -1;
+  const v = a - b;
+  return dir === "asc" ? v : -v;
+}
+
+function matchupSortKey(m: MyLeaguesMatchRow): string {
+  return `${m.homeTeamName} ${m.awayTeamName}`.toLocaleLowerCase("es");
+}
+
+type FilterColumn = "league" | "season" | "status" | "category";
 
 type SortKey = "kickoff" | "matchup";
 
 export type MatchesTableSortState = { key: SortKey; dir: "asc" | "desc" };
 
-/** Orden inicial: fecha ascendente = partido más próximo arriba (coincide con `dir=asc` en el API). */
+/** Orden inicial: fecha ascendente = partido más próximo arriba. */
 export const MATCHES_TABLE_DEFAULT_SORT: MatchesTableSortState = {
   key: "kickoff",
   dir: "asc",
@@ -172,6 +187,17 @@ function IconFilter({ active }: { active: boolean }) {
       <path d="M10 18h4" />
     </svg>
   );
+}
+
+function removeTagFromSet(
+  setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+  value: string,
+) {
+  setter((prev) => {
+    const next = new Set(prev);
+    next.delete(value);
+    return next;
+  });
 }
 
 function selectedTagsChips(
@@ -245,58 +271,29 @@ export type MatchesFilterableTableHandle = {
   clearAllFilters: () => void;
 };
 
-export type MatchesFilterableTableFacets = {
-  leagueNames: string[];
-  seasonNames: string[];
-  statuses: string[];
-  categoryLabels: string[];
-};
-
 export type MatchesFilterableTableProps = {
+  /** Dataset completo; filtros, orden y paginación solo en cliente. */
   matchRows: readonly MyLeaguesMatchRow[];
-  facets: MatchesFilterableTableFacets;
-  totalCount: number;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-  sort: MatchesTableSortState;
-  onSortChange: (next: MatchesTableSortState) => void;
-  filterLeague: string[];
-  filterSeason: string[];
-  filterStatus: string[];
-  filterCategory: string[];
-  onToggleFilter: (column: FilterColumn, value: string) => void;
-  onClearColumnFilter: (column: FilterColumn) => void;
-  onRequestClearAll: () => void;
   wrapperClassName?: string;
   onHasActiveFiltersChange?: (active: boolean) => void;
+  onEditMatch: (row: MyLeaguesMatchRow) => void;
 };
+
+const UI_PAGE_SIZE = 20;
 
 export const MatchesFilterableTable = forwardRef<
   MatchesFilterableTableHandle,
   MatchesFilterableTableProps
 >(function MatchesFilterableTable(
-  {
-    matchRows,
-    facets,
-    totalCount,
-    page,
-    pageSize,
-    onPageChange,
-    sort,
-    onSortChange,
-    filterLeague,
-    filterSeason,
-    filterStatus,
-    filterCategory,
-    onToggleFilter,
-    onClearColumnFilter,
-    onRequestClearAll,
-    wrapperClassName,
-    onHasActiveFiltersChange,
-  },
+  { matchRows: allMatchRows, wrapperClassName, onHasActiveFiltersChange, onEditMatch },
   ref,
 ) {
+  const [sort, setSort] = useState<MatchesTableSortState>(MATCHES_TABLE_DEFAULT_SORT);
+  const [page, setPage] = useState(1);
+  const [filterLeague, setFilterLeague] = useState<Set<string>>(() => new Set());
+  const [filterSeason, setFilterSeason] = useState<Set<string>>(() => new Set());
+  const [filterStatus, setFilterStatus] = useState<Set<string>>(() => new Set());
+  const [filterCategory, setFilterCategory] = useState<Set<string>>(() => new Set());
   const [openFilter, setOpenFilter] = useState<FilterColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const portalMounted = useSyncExternalStore(
@@ -312,16 +309,68 @@ export const MatchesFilterableTable = forwardRef<
     setFilterAnchorRect(null);
   }, []);
 
+  const categoryLabel = useCallback((m: MyLeaguesMatchRow) => {
+    const n = m.categoryName?.trim();
+    return n && n.length > 0 ? n : "Sin categoría";
+  }, []);
+
+  const optionSets = useMemo(() => {
+    const leagues = new Set<string>();
+    const seasons = new Set<string>();
+    const statuses = new Set<string>();
+    const categories = new Set<string>();
+    for (const m of allMatchRows) {
+      leagues.add(m.leagueName);
+      seasons.add(m.seasonName);
+      statuses.add(m.status);
+      categories.add(categoryLabel(m));
+    }
+    return {
+      leagues: [...leagues].sort((a, b) => a.localeCompare(b, "es")),
+      seasons: [...seasons].sort((a, b) => a.localeCompare(b, "es")),
+      statuses: [...statuses].sort((a, b) => a.localeCompare(b)),
+      categories: [...categories].sort((a, b) => a.localeCompare(b, "es")),
+    };
+  }, [allMatchRows, categoryLabel]);
+
+  const filteredSortedRows = useMemo(() => {
+    let list = [...allMatchRows];
+
+    if (filterLeague.size > 0) {
+      list = list.filter((m) => filterLeague.has(m.leagueName));
+    }
+    if (filterSeason.size > 0) {
+      list = list.filter((m) => filterSeason.has(m.seasonName));
+    }
+    if (filterStatus.size > 0) {
+      list = list.filter((m) => filterStatus.has(m.status));
+    }
+    if (filterCategory.size > 0) {
+      list = list.filter((m) => filterCategory.has(categoryLabel(m)));
+    }
+
+    list.sort((a, b) => {
+      if (sort.key === "kickoff") {
+        return cmpKickoff(a.scheduledAt, b.scheduledAt, sort.dir);
+      }
+      const cmp = matchupSortKey(a).localeCompare(matchupSortKey(b), "es");
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+
+    return list;
+  }, [allMatchRows, sort, filterLeague, filterSeason, filterStatus, filterCategory, categoryLabel]);
+
+  const totalFiltered = filteredSortedRows.length;
+  const maxPage = Math.max(1, Math.ceil(totalFiltered / UI_PAGE_SIZE));
+  const effectivePage = Math.min(Math.max(1, page), maxPage);
+  const pageStart = (effectivePage - 1) * UI_PAGE_SIZE;
+  const visibleRows = filteredSortedRows.slice(pageStart, pageStart + UI_PAGE_SIZE);
+
   const hasActiveColumnFilters =
-    filterLeague.length +
-      filterSeason.length +
-      filterStatus.length +
-      filterCategory.length >
-    0;
+    filterLeague.size + filterSeason.size + filterStatus.size + filterCategory.size > 0;
   const sortDiffersFromDefault = !isDefaultSort(sort);
-  const pageOutOfRange = page > 1 && totalCount === 0;
-  const canClearTableState =
-    hasActiveColumnFilters || sortDiffersFromDefault || pageOutOfRange;
+  const pageAwayFromFirst = effectivePage > 1;
+  const canClearTableState = hasActiveColumnFilters || sortDiffersFromDefault || pageAwayFromFirst;
 
   useEffect(() => {
     onHasActiveFiltersChange?.(canClearTableState);
@@ -331,11 +380,16 @@ export const MatchesFilterableTable = forwardRef<
     ref,
     () => ({
       clearAllFilters: () => {
-        onRequestClearAll();
+        setFilterLeague(new Set());
+        setFilterSeason(new Set());
+        setFilterStatus(new Set());
+        setFilterCategory(new Set());
+        setSort(MATCHES_TABLE_DEFAULT_SORT);
+        setPage(1);
         closeFilter();
       },
     }),
-    [closeFilter, onRequestClearAll],
+    [closeFilter],
   );
 
   useEffect(() => {
@@ -361,54 +415,53 @@ export const MatchesFilterableTable = forwardRef<
     };
   }, [openFilter, closeFilter]);
 
-  const categoryLabel = useCallback((m: MyLeaguesMatchRow) => {
-    const n = m.categoryName?.trim();
-    return n && n.length > 0 ? n : "Sin categoría";
-  }, []);
-
-  const optionSets = useMemo(
-    () => ({
-      leagues: [...facets.leagueNames],
-      seasons: [...facets.seasonNames],
-      statuses: [...facets.statuses],
-      categories: [...facets.categoryLabels],
-    }),
-    [facets],
-  );
-
-  const maxPage = Math.max(1, Math.ceil(totalCount / pageSize));
-  const effectivePage = Math.min(Math.max(1, page), maxPage);
-  const pageStart = (effectivePage - 1) * pageSize;
-  const visibleRows = matchRows;
-
   const canGoNext = effectivePage < maxPage;
 
   const goPrevPage = useCallback(() => {
-    onPageChange(Math.max(1, effectivePage - 1));
-  }, [effectivePage, onPageChange]);
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
 
   const goNextPage = useCallback(() => {
-    onPageChange(Math.min(effectivePage + 1, maxPage));
-  }, [effectivePage, maxPage, onPageChange]);
+    setPage((p) => {
+      const mp = Math.max(1, Math.ceil(totalFiltered / UI_PAGE_SIZE));
+      return Math.min(p + 1, mp);
+    });
+  }, [totalFiltered]);
 
   function toggleSortColumn(column: SortKey) {
+    setPage(1);
     const dirDefaults: Record<SortKey, "asc" | "desc"> = {
       kickoff: "asc",
       matchup: "asc",
     };
-    const next: MatchesTableSortState =
-      sort.key === column
-        ? { key: column, dir: sort.dir === "asc" ? "desc" : "asc" }
-        : { key: column, dir: dirDefaults[column] };
-    onSortChange(next);
+    setSort((s) => {
+      if (s.key === column) return { key: column, dir: s.dir === "asc" ? "desc" : "asc" };
+      return { key: column, dir: dirDefaults[column] };
+    });
   }
 
   function toggleFilterValue(column: FilterColumn, value: string) {
-    onToggleFilter(column, value);
+    setPage(1);
+    const patch = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
+      setter((prev) => {
+        const next = new Set(prev);
+        if (next.has(value)) next.delete(value);
+        else next.add(value);
+        return next;
+      });
+    };
+    if (column === "league") patch(setFilterLeague);
+    else if (column === "season") patch(setFilterSeason);
+    else if (column === "status") patch(setFilterStatus);
+    else patch(setFilterCategory);
   }
 
   function clearColumnFilter(column: FilterColumn) {
-    onClearColumnFilter(column);
+    setPage(1);
+    if (column === "league") setFilterLeague(new Set());
+    else if (column === "season") setFilterSeason(new Set());
+    else if (column === "status") setFilterStatus(new Set());
+    else setFilterCategory(new Set());
   }
 
   const filterPanelStyle = useMemo(() => {
@@ -442,12 +495,12 @@ export const MatchesFilterableTable = forwardRef<
             : optionSets.categories;
     const selectedArr =
       col === "league"
-        ? filterLeague
+        ? [...filterLeague].sort((a, b) => a.localeCompare(b, "es"))
         : col === "season"
-          ? filterSeason
+          ? [...filterSeason].sort((a, b) => a.localeCompare(b, "es"))
           : col === "status"
-            ? filterStatus
-            : filterCategory;
+            ? [...filterStatus].sort((a, b) => a.localeCompare(b))
+            : [...filterCategory].sort((a, b) => a.localeCompare(b, "es"));
 
     return createPortal(
       <div
@@ -518,7 +571,7 @@ export const MatchesFilterableTable = forwardRef<
     );
   }
 
-  function headerFilterColumn(col: FilterColumn, label: string, selected: readonly string[]) {
+  function headerFilterColumn(col: FilterColumn, label: string, selected: Set<string>) {
     const colWord =
       col === "league"
         ? "liga"
@@ -527,7 +580,7 @@ export const MatchesFilterableTable = forwardRef<
           : col === "status"
             ? "estado"
             : "categoría";
-    const n = selected.length;
+    const n = selected.size;
     return (
       <button
         type="button"
@@ -620,32 +673,44 @@ export const MatchesFilterableTable = forwardRef<
               </th>
               <th className="max-w-[14rem] px-4 py-3 align-top whitespace-normal">
                 {headerFilterColumn("league", "Liga", filterLeague)}
-                {selectedTagsChips(filterLeague, "Liga", (v) => v, (v) =>
-                  onToggleFilter("league", v),
+                {selectedTagsChips(
+                  [...filterLeague].sort((a, b) => a.localeCompare(b, "es")),
+                  "Liga",
+                  (v) => v,
+                  (v) => removeTagFromSet(setFilterLeague, v),
                 )}
               </th>
               <th className="max-w-[12rem] px-4 py-3 align-top whitespace-normal">
                 {headerFilterColumn("season", "Temp.", filterSeason)}
-                {selectedTagsChips(filterSeason, "Temporada", (v) => v, (v) =>
-                  onToggleFilter("season", v),
+                {selectedTagsChips(
+                  [...filterSeason].sort((a, b) => a.localeCompare(b, "es")),
+                  "Temporada",
+                  (v) => v,
+                  (v) => removeTagFromSet(setFilterSeason, v),
                 )}
               </th>
               <th className="max-w-[12rem] px-4 py-3 align-top whitespace-normal">
                 {headerFilterColumn("category", "Cat.", filterCategory)}
-                {selectedTagsChips(filterCategory, "Categoría", (v) => v, (v) =>
-                  onToggleFilter("category", v),
+                {selectedTagsChips(
+                  [...filterCategory].sort((a, b) => a.localeCompare(b, "es")),
+                  "Categoría",
+                  (v) => v,
+                  (v) => removeTagFromSet(setFilterCategory, v),
                 )}
               </th>
               <th className="max-w-[10rem] px-4 py-3 align-top whitespace-normal">
                 {headerFilterColumn("status", "Estado", filterStatus)}
-                {selectedTagsChips(filterStatus, "Estado", (v) => statusLabelMx(v), (v) =>
-                  onToggleFilter("status", v),
+                {selectedTagsChips(
+                  [...filterStatus].sort((a, b) => a.localeCompare(b)),
+                  "Estado",
+                  (v) => statusLabelMx(v),
+                  (v) => removeTagFromSet(setFilterStatus, v),
                 )}
               </th>
             </tr>
           </thead>
           <tbody className="divide-border divide-y">
-            {matchRows.length === 0 ? (
+            {filteredSortedRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={8}
@@ -656,7 +721,19 @@ export const MatchesFilterableTable = forwardRef<
               </tr>
             ) : (
               visibleRows.map((m) => (
-                <tr key={m.id} className="hover:bg-surface-code/20 transition-colors">
+                <tr
+                  key={m.id}
+                  role="button"
+                  tabIndex={0}
+                  className="hover:bg-surface-code/20 cursor-pointer transition-colors"
+                  onClick={() => onEditMatch(m)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onEditMatch(m);
+                    }
+                  }}
+                >
                   <td className="px-4 py-2.5 align-middle">
                     <PhaseBadge m={m} />
                   </td>
@@ -690,7 +767,7 @@ export const MatchesFilterableTable = forwardRef<
             )}
           </tbody>
         </table>
-        {totalCount > 0 ? (
+        {totalFiltered > 0 ? (
           <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
             <p className="text-foreground-muted text-[13px] leading-snug">
               Mostrando{" "}
@@ -698,8 +775,8 @@ export const MatchesFilterableTable = forwardRef<
                 {pageStart + 1}–{pageStart + visibleRows.length}
               </span>{" "}
               de{" "}
-              <span className="text-foreground font-semibold tabular-nums">{totalCount}</span>
-              <span className="text-foreground-subtle"> ({pageSize} por página)</span>
+              <span className="text-foreground font-semibold tabular-nums">{totalFiltered}</span>
+              <span className="text-foreground-subtle"> ({UI_PAGE_SIZE} por página)</span>
             </p>
             <div className="flex items-center gap-2">
               <button

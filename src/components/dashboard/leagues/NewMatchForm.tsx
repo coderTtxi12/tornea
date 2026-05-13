@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { newMatchJsonSchema } from "./new-match-form-schema";
-import type { MyLeaguesApiItem, MyLeaguesVenueRow } from "./my-leagues-state";
+import type {
+  MyLeaguesApiItem,
+  MyLeaguesMatchRow,
+  MyLeaguesVenueRow,
+} from "./my-leagues-state";
 
 type SeasonTeamRow = {
   id: string;
@@ -18,6 +22,8 @@ type NewMatchFormProps = {
   onClose: () => void;
   onMatchCreated?: () => void;
   onBusyChange?: (busy: boolean) => void;
+  /** Partido a editar; si se pasa, el envío usa PATCH y la liga no se puede cambiar. */
+  editRow?: MyLeaguesMatchRow | null;
 };
 
 const MATCH_ROUND_PRESET_CUSTOM = "__custom__";
@@ -65,20 +71,57 @@ function localDatePartsToIso(
   return d.toISOString();
 }
 
+/** Misma convención que al crear: fecha/hora local del navegador. */
+function isoToBrowserLocalDateTime(iso: string): {
+  dateStr: string;
+  hour12: number;
+  minute: number;
+  meridiem: "AM" | "PM";
+} | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  const dateStr = `${y}-${mo}-${da}`;
+  const h24 = d.getHours();
+  const minute = d.getMinutes();
+  const meridiem: "AM" | "PM" = h24 >= 12 ? "PM" : "AM";
+  let hour12 = h24 % 12;
+  if (hour12 === 0) hour12 = 12;
+  return { dateStr, hour12, minute, meridiem };
+}
+
+function roundStateFromStoredLabel(
+  label: string | null,
+): { preset: string; custom: string } {
+  if (!label?.trim()) return { preset: "", custom: "" };
+  const t = label.trim();
+  const presetHit = MATCH_ROUND_OPTIONS.find(
+    (o) => o.value && o.value !== MATCH_ROUND_PRESET_CUSTOM && o.value === t,
+  );
+  if (presetHit) return { preset: t, custom: "" };
+  return { preset: MATCH_ROUND_PRESET_CUSTOM, custom: t };
+}
+
 export function NewMatchForm({
   leagues,
   venues,
   onClose,
   onMatchCreated,
   onBusyChange,
+  editRow = null,
 }: NewMatchFormProps) {
-  const [leagueId, setLeagueId] = useState(() => leagues[0]?.id ?? "");
+  const isEdit = Boolean(editRow);
+
+  const [leagueId, setLeagueId] = useState(() => editRow?.leagueId ?? leagues[0]?.id ?? "");
   const selectedLeague = useMemo(
     () => leagues.find((l) => l.id === leagueId) ?? null,
     [leagueId, leagues],
   );
 
   const [seasonId, setSeasonId] = useState(() => {
+    if (editRow) return editRow.seasonId;
     const L = leagues[0];
     if (!L?.seasons.length) return "";
     if (L.primarySeasonId && L.seasons.some((s) => s.id === L.primarySeasonId)) {
@@ -87,21 +130,33 @@ export function NewMatchForm({
     return L.seasons[0]?.id ?? "";
   });
 
-  const [matchCategoryId, setMatchCategoryId] = useState("");
+  const [matchCategoryId, setMatchCategoryId] = useState(() => editRow?.leagueCategoryId ?? "");
   const [seasonTeams, setSeasonTeams] = useState<SeasonTeamRow[]>([]);
   const [teamsLoad, setTeamsLoad] = useState<"idle" | "loading" | "error">("idle");
   const [teamsError, setTeamsError] = useState<string | null>(null);
 
-  const [homeTeamId, setHomeTeamId] = useState("");
-  const [awayTeamId, setAwayTeamId] = useState("");
-  const [scheduledDate, setScheduledDate] = useState("");
-  const [scheduledHour12, setScheduledHour12] = useState(7);
-  const [scheduledMinute, setScheduledMinute] = useState(0);
-  const [scheduledMeridiem, setScheduledMeridiem] = useState<"AM" | "PM">("PM");
-  const [venueId, setVenueId] = useState("");
-  const [notes, setNotes] = useState("");
-  const [roundPreset, setRoundPreset] = useState("");
-  const [roundLabelCustom, setRoundLabelCustom] = useState("");
+  const [homeTeamId, setHomeTeamId] = useState(() => editRow?.homeTeamId ?? "");
+  const [awayTeamId, setAwayTeamId] = useState(() => editRow?.awayTeamId ?? "");
+  const [scheduledDate, setScheduledDate] = useState(
+    () => (editRow ? isoToBrowserLocalDateTime(editRow.scheduledAt)?.dateStr ?? "" : ""),
+  );
+  const [scheduledHour12, setScheduledHour12] = useState(
+    () => isoToBrowserLocalDateTime(editRow?.scheduledAt ?? "")?.hour12 ?? 7,
+  );
+  const [scheduledMinute, setScheduledMinute] = useState(
+    () => isoToBrowserLocalDateTime(editRow?.scheduledAt ?? "")?.minute ?? 0,
+  );
+  const [scheduledMeridiem, setScheduledMeridiem] = useState<"AM" | "PM">(
+    () => isoToBrowserLocalDateTime(editRow?.scheduledAt ?? "")?.meridiem ?? "PM",
+  );
+  const [venueId, setVenueId] = useState(() => editRow?.venueId ?? "");
+  const [notes, setNotes] = useState(() => editRow?.notes ?? "");
+  const [roundPreset, setRoundPreset] = useState(() =>
+    editRow ? roundStateFromStoredLabel(editRow.roundLabel).preset : "",
+  );
+  const [roundLabelCustom, setRoundLabelCustom] = useState(() =>
+    editRow ? roundStateFromStoredLabel(editRow.roundLabel).custom : "",
+  );
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -164,6 +219,7 @@ export function NewMatchForm({
   }, [leagueId, seasonId]);
 
   function handleLeagueChange(nextLeagueId: string) {
+    if (isEdit) return;
     setLeagueId(nextLeagueId);
     const L = leagues.find((l) => l.id === nextLeagueId) ?? null;
     setSeasonId(defaultSeasonIdForLeague(L));
@@ -271,8 +327,11 @@ export function NewMatchForm({
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/matches`, {
-        method: "POST",
+      const url = isEdit
+        ? `/api/leagues/${encodeURIComponent(leagueId)}/matches/${encodeURIComponent(editRow!.id)}`
+        : `/api/leagues/${encodeURIComponent(leagueId)}/matches`;
+      const res = await fetch(url, {
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed.data),
       });
@@ -296,13 +355,17 @@ export function NewMatchForm({
         setSubmitError(
           typeof data.error === "string"
             ? data.error
-            : "No se pudo crear el partido. Intenta de nuevo.",
+            : isEdit
+              ? "No se pudo guardar el partido. Intenta de nuevo."
+              : "No se pudo crear el partido. Intenta de nuevo.",
         );
         return;
       }
 
       onMatchCreated?.();
-      resetForm();
+      if (!isEdit) {
+        resetForm();
+      }
       onClose();
     } finally {
       setSubmitting(false);
@@ -315,13 +378,25 @@ export function NewMatchForm({
   return (
     <div className="w-full">
       <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
-        El partido se guarda en <code className="text-foreground-muted text-xs">matches</code> con{" "}
-        <code className="text-foreground-muted text-xs">season_id</code>. Ambos equipos deben estar
-        dados de alta en la temporada en{" "}
-        <code className="text-foreground-muted text-xs">season_teams</code>. La hora se toma según
-        tu navegador y en la base también queda el{" "}
-        <code className="text-foreground-muted text-xs">timezone</code> de la liga (
-        {selectedLeague?.timezone ?? "—"}).
+        {isEdit ? (
+          <>
+            Cambios en <code className="text-foreground-muted text-xs">matches</code> para este
+            partido. Las mismas reglas que al crear: equipos inscritos en la temporada (
+            <code className="text-foreground-muted text-xs">season_teams</code>
+            ). Zona horaria de la liga:{" "}
+            <code className="text-foreground-muted text-xs">{selectedLeague?.timezone ?? "—"}</code>.
+          </>
+        ) : (
+          <>
+            El partido se guarda en <code className="text-foreground-muted text-xs">matches</code>{" "}
+            con <code className="text-foreground-muted text-xs">season_id</code>. Ambos equipos deben
+            estar dados de alta en la temporada en{" "}
+            <code className="text-foreground-muted text-xs">season_teams</code>. La hora se toma
+            según tu navegador y en la base también queda el{" "}
+            <code className="text-foreground-muted text-xs">timezone</code> de la liga (
+            {selectedLeague?.timezone ?? "—"}).
+          </>
+        )}
       </p>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -331,7 +406,7 @@ export function NewMatchForm({
           </div>
         ) : null}
 
-        {leagues.length > 1 ? (
+        {leagues.length > 1 && !isEdit ? (
           <label className="block">
             <span className="text-foreground-muted text-xs font-medium">Liga</span>
             <div className="relative mt-1">
@@ -752,7 +827,9 @@ export function NewMatchForm({
             type="button"
             className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
             onClick={() => {
-              resetForm();
+              if (!isEdit) {
+                resetForm();
+              }
               onClose();
             }}
             disabled={submitting}
@@ -764,7 +841,7 @@ export function NewMatchForm({
             className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
             disabled={submitting || noSeasons || teamsLoad === "loading" || visibleTeams.length < 2}
           >
-            {submitting ? "Guardando…" : "Programar partido"}
+            {submitting ? "Guardando…" : isEdit ? "Guardar cambios" : "Programar partido"}
           </button>
         </div>
       </form>

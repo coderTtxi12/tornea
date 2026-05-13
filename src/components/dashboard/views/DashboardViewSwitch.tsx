@@ -4,6 +4,7 @@ import type { DashboardNavKey } from "../nav";
 
 import type {
   MyLeaguesApiItem,
+  MyLeaguesMatchRow,
   MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
   MyLeaguesVenueRow,
@@ -39,6 +40,7 @@ export function DashboardViewSwitch({
   onOpenRegisterPlayerDrawer,
   onOpenPlayerSheetDrawer,
   onOpenNewMatchDrawer,
+  onOpenEditMatchDrawer,
   fixtureDataRefreshKey = 0,
 }: {
   nav: DashboardNavKey;
@@ -66,6 +68,7 @@ export function DashboardViewSwitch({
     playerId: string;
   }) => void;
   onOpenNewMatchDrawer: () => void;
+  onOpenEditMatchDrawer: (row: MyLeaguesMatchRow) => void;
   fixtureDataRefreshKey?: number;
 }) {
   switch (nav) {
@@ -85,6 +88,7 @@ export function DashboardViewSwitch({
           hasManagedLeagues={leagueOrgCards.length > 0}
           fixtureDataRefreshKey={fixtureDataRefreshKey}
           onOpenNewMatchDrawer={onOpenNewMatchDrawer}
+          onOpenEditMatchDrawer={onOpenEditMatchDrawer}
         />
       );
     case "live":

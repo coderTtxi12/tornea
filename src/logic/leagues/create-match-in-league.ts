@@ -43,23 +43,34 @@ export type CreateMatchInLeagueResult =
         | "bad_teams_league";
     };
 
+type MatchScheduleCoreError = Exclude<CreateMatchInLeagueResult, { ok: true }>["reason"];
+
+type MatchScheduleCoreInput = {
+  leagueId: string;
+  seasonId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  leagueCategoryId?: string | null;
+  venueId?: string | null;
+  roundLabel?: string | null;
+  notes?: string | null;
+};
+
+type MatchScheduleCoreOk = {
+  leagueTimezone: string;
+  catId: string | null;
+  venueId: string | null;
+  roundLabel: string | null;
+  notes: string | null;
+};
+
 /**
- * Crea un partido (`matches`) validando inscripción en `season_teams` y categoría si aplica.
+ * Valida temporada, equipos, categoría y cancha para alta o edición de un partido en una liga.
  */
-export async function createMatchInLeague(
-  input: CreateMatchInLeagueInput,
-): Promise<CreateMatchInLeagueResult> {
-  const db = getDb();
-
-  if (input.homeTeamId === input.awayTeamId) {
-    return { ok: false, reason: "same_team" };
-  }
-
-  const allowed = await userCanManageLeague(db, input.leagueId, input.actorUserId);
-  if (!allowed) {
-    return { ok: false, reason: "forbidden" };
-  }
-
+async function resolveMatchScheduleCore(
+  db: ReturnType<typeof getDb>,
+  input: MatchScheduleCoreInput,
+): Promise<{ ok: true; data: MatchScheduleCoreOk } | { ok: false; reason: MatchScheduleCoreError }> {
   const [league] = await db
     .select({
       timezone: leagues.timezone,
@@ -143,6 +154,50 @@ export async function createMatchInLeague(
   const roundLabel =
     input.roundLabel?.trim() ? input.roundLabel.trim().slice(0, 120) : null;
 
+  return {
+    ok: true,
+    data: {
+      leagueTimezone: league.timezone,
+      catId,
+      venueId,
+      roundLabel,
+      notes: input.notes?.trim() ? input.notes.trim() : null,
+    },
+  };
+}
+
+/**
+ * Crea un partido (`matches`) validando inscripción en `season_teams` y categoría si aplica.
+ */
+export async function createMatchInLeague(
+  input: CreateMatchInLeagueInput,
+): Promise<CreateMatchInLeagueResult> {
+  const db = getDb();
+
+  if (input.homeTeamId === input.awayTeamId) {
+    return { ok: false, reason: "same_team" };
+  }
+
+  const allowed = await userCanManageLeague(db, input.leagueId, input.actorUserId);
+  if (!allowed) {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const core = await resolveMatchScheduleCore(db, {
+    leagueId: input.leagueId,
+    seasonId: input.seasonId,
+    homeTeamId: input.homeTeamId,
+    awayTeamId: input.awayTeamId,
+    leagueCategoryId: input.leagueCategoryId,
+    venueId: input.venueId,
+    roundLabel: input.roundLabel,
+    notes: input.notes,
+  });
+  if (!core.ok) {
+    return { ok: false, reason: core.reason };
+  }
+  const { leagueTimezone, catId, venueId, roundLabel, notes } = core.data;
+
   const [created] = await db
     .insert(matches)
     .values({
@@ -151,13 +206,90 @@ export async function createMatchInLeague(
       homeTeamId: input.homeTeamId,
       awayTeamId: input.awayTeamId,
       scheduledAt: input.scheduledAt,
-      timezone: league.timezone,
+      timezone: leagueTimezone,
       roundLabel,
       venueId,
-      notes: input.notes?.trim() ? input.notes.trim() : null,
+      notes,
       status: "scheduled",
     })
     .returning({ id: matches.id });
 
   return { ok: true, matchId: created!.id };
+}
+
+export type UpdateMatchInLeagueInput = CreateMatchInLeagueInput & { matchId: string };
+
+export type UpdateMatchInLeagueResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | MatchScheduleCoreError
+        | "forbidden"
+        | "same_team"
+        | "match_not_found";
+    };
+
+/**
+ * Actualiza un partido existente (`matches`) con las mismas reglas que el alta.
+ */
+export async function updateMatchInLeague(
+  input: UpdateMatchInLeagueInput,
+): Promise<UpdateMatchInLeagueResult> {
+  const db = getDb();
+
+  if (input.homeTeamId === input.awayTeamId) {
+    return { ok: false, reason: "same_team" };
+  }
+
+  const allowed = await userCanManageLeague(db, input.leagueId, input.actorUserId);
+  if (!allowed) {
+    return { ok: false, reason: "forbidden" };
+  }
+
+  const [existing] = await db
+    .select({
+      id: matches.id,
+    })
+    .from(matches)
+    .innerJoin(seasons, eq(matches.seasonId, seasons.id))
+    .where(and(eq(matches.id, input.matchId), eq(seasons.leagueId, input.leagueId)))
+    .limit(1);
+
+  if (!existing) {
+    return { ok: false, reason: "match_not_found" };
+  }
+
+  const core = await resolveMatchScheduleCore(db, {
+    leagueId: input.leagueId,
+    seasonId: input.seasonId,
+    homeTeamId: input.homeTeamId,
+    awayTeamId: input.awayTeamId,
+    leagueCategoryId: input.leagueCategoryId,
+    venueId: input.venueId,
+    roundLabel: input.roundLabel,
+    notes: input.notes,
+  });
+  if (!core.ok) {
+    return { ok: false, reason: core.reason };
+  }
+  const { leagueTimezone, catId, venueId, roundLabel, notes } = core.data;
+
+  await db
+    .update(matches)
+    .set({
+      seasonId: input.seasonId,
+      leagueCategoryId: catId,
+      homeTeamId: input.homeTeamId,
+      awayTeamId: input.awayTeamId,
+      scheduledAt: input.scheduledAt,
+      timezone: leagueTimezone,
+      roundLabel,
+      venueId,
+      notes,
+      updatedAt: new Date(),
+    })
+    .where(eq(matches.id, input.matchId));
+
+  return { ok: true };
 }

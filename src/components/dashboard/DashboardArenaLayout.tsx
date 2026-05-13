@@ -17,6 +17,7 @@ import {
   NewVenueForm,
   PlayerTechnicalSheetPanel,
   type DashboardMyLeaguesState,
+  type MyLeaguesMatchRow,
 } from "./leagues";
 import {
   DashboardNavPillMobile,
@@ -54,7 +55,8 @@ type RightDrawerState =
   | { kind: "register-player"; prefillTeamId?: string }
   | { kind: "edit-player"; leagueId: string; teamId: string; playerId: string }
   | { kind: "player-sheet"; leagueId: string; teamId: string; playerId: string }
-  | { kind: "new-match" };
+  | { kind: "new-match" }
+  | { kind: "edit-match"; initialRow: MyLeaguesMatchRow };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -216,6 +218,11 @@ export function DashboardArenaLayout({
     setDrawer({ kind: "new-match" });
   }, []);
 
+  const openEditMatchDrawer = useCallback((row: MyLeaguesMatchRow) => {
+    setMatchFormKey((k) => k + 1);
+    setDrawer({ kind: "edit-match", initialRow: row });
+  }, []);
+
   const closeDrawer = useCallback(() => {
     setDrawer({ kind: "closed" });
   }, []);
@@ -333,6 +340,7 @@ export function DashboardArenaLayout({
                   onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
                   onOpenPlayerSheetDrawer={openPlayerSheetDrawer}
                   onOpenNewMatchDrawer={openNewMatchDrawer}
+                  onOpenEditMatchDrawer={openEditMatchDrawer}
                   fixtureDataRefreshKey={railRefreshKey}
                 />
               )}
@@ -355,7 +363,9 @@ export function DashboardArenaLayout({
                 ? "Nueva categoría"
                 : drawer.kind === "new-match"
                   ? "Nuevo partido"
-                  : drawer.kind === "edit-team"
+                  : drawer.kind === "edit-match"
+                    ? "Editar partido"
+                    : drawer.kind === "edit-team"
                   ? "Editar equipo"
                   : drawer.kind === "register-player"
                     ? "Agregar jugador"
@@ -376,7 +386,9 @@ export function DashboardArenaLayout({
                 ? "La categoría queda en league_categories y se ordena al final (sort_order)."
                 : drawer.kind === "new-match"
                   ? "Alta en matches: temporada, equipos inscritos (season_teams), fecha/hora y cancha opcional."
-                  : drawer.kind === "edit-team"
+                  : drawer.kind === "edit-match"
+                    ? "Actualizá fecha, equipos, fase, cancha o notas; se validan las mismas reglas que al programar."
+                    : drawer.kind === "edit-team"
                   ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
                   : drawer.kind === "register-player"
                     ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
@@ -412,11 +424,17 @@ export function DashboardArenaLayout({
               onBusyChange={setDrawerBusy}
               onCategoryCreated={onLeagueCreated}
             />
-          ) : drawer.kind === "new-match" && myLeagues.status === "ready" ? (
+          ) : (drawer.kind === "new-match" || drawer.kind === "edit-match") &&
+            myLeagues.status === "ready" ? (
             <NewMatchForm
-              key={matchFormKey}
+              key={
+                drawer.kind === "edit-match"
+                  ? `edit-match-${drawer.initialRow.id}-${matchFormKey}`
+                  : `new-match-${matchFormKey}`
+              }
               leagues={myLeagues.items}
               venues={myLeagues.venues}
+              editRow={drawer.kind === "edit-match" ? drawer.initialRow : null}
               onClose={closeDrawer}
               onBusyChange={setDrawerBusy}
               onMatchCreated={onLeagueCreated}
