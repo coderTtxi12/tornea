@@ -38,7 +38,8 @@ type RightDrawerState =
   | { kind: "new-category"; leagueId: string; leagueName: string }
   | { kind: "register-team" }
   | { kind: "edit-team"; leagueId: string; teamId: string }
-  | { kind: "register-player"; prefillTeamId?: string };
+  | { kind: "register-player"; prefillTeamId?: string }
+  | { kind: "edit-player"; leagueId: string; teamId: string; playerId: string };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -135,6 +136,7 @@ export function DashboardArenaLayout({
   const [teamFormKey, setTeamFormKey] = useState(0);
   const [playerFormKey, setPlayerFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
+  const [drawerBusy, setDrawerBusy] = useState(false);
 
   const hasLeagues =
     myLeagues.status === "ready" && myLeagues.items.length > 0;
@@ -164,9 +166,21 @@ export function DashboardArenaLayout({
     setDrawer({ kind: "register-player", prefillTeamId: args?.prefillTeamId });
   }, []);
 
+  const openEditPlayerDrawer = useCallback(
+    (args: { leagueId: string; teamId: string; playerId: string }) => {
+      setPlayerFormKey((k) => k + 1);
+      setDrawer({ kind: "edit-player", ...args });
+    },
+    [],
+  );
+
   const closeDrawer = useCallback(() => {
     setDrawer({ kind: "closed" });
   }, []);
+
+  useEffect(() => {
+    setDrawerBusy(false);
+  }, [drawer.kind]);
 
   return (
     <div
@@ -261,11 +275,13 @@ export function DashboardArenaLayout({
                     myLeagues.status === "ready" ? myLeagues.items : []
                   }
                   teamRows={myLeagues.status === "ready" ? myLeagues.teams : []}
+                  playerRows={myLeagues.status === "ready" ? myLeagues.players : []}
                   onOpenNewLeagueDrawer={openNewLeagueDrawer}
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
                   onOpenRegisterTeamDrawer={openRegisterTeamDrawer}
                   onOpenEditTeamDrawer={openEditTeamDrawer}
                   onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
+                  onOpenEditPlayerDrawer={openEditPlayerDrawer}
                 />
               )}
             </div>
@@ -279,6 +295,7 @@ export function DashboardArenaLayout({
         <DashboardRightSlideover
           open
           size="xl"
+          preventClose={drawerBusy}
           title={
             drawer.kind === "new-league"
               ? "Nueva liga"
@@ -288,7 +305,9 @@ export function DashboardArenaLayout({
                   ? "Editar equipo"
                   : drawer.kind === "register-player"
                     ? "Agregar jugador"
-                    : "Registrar equipo"
+                    : drawer.kind === "edit-player"
+                      ? "Editar jugador"
+                      : "Registrar equipo"
           }
           description={
             drawer.kind === "new-league"
@@ -299,7 +318,9 @@ export function DashboardArenaLayout({
                   ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
                   : drawer.kind === "register-player"
                     ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
-                    : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
+                    : drawer.kind === "edit-player"
+                      ? "Nombre, nacimiento, dorsal, posición y WhatsApp. Nueva foto o CURP opcional."
+                      : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
           }
           onClose={closeDrawer}
         >
@@ -308,6 +329,7 @@ export function DashboardArenaLayout({
               key={leagueFormKey}
               variant="drawer"
               onCancel={closeDrawer}
+              onBusyChange={setDrawerBusy}
               onLeagueCreated={() => {
                 onLeagueCreated?.();
                 closeDrawer();
@@ -319,6 +341,7 @@ export function DashboardArenaLayout({
               leagueId={drawer.leagueId}
               leagueName={drawer.leagueName}
               onClose={closeDrawer}
+              onBusyChange={setDrawerBusy}
               onCategoryCreated={onLeagueCreated}
             />
           ) : myLeagues.status === "ready" &&
@@ -336,20 +359,36 @@ export function DashboardArenaLayout({
                   : null
               }
               onClose={closeDrawer}
+              onBusyChange={setDrawerBusy}
               onTeamCreated={() => {
                 onLeagueCreated?.();
                 closeDrawer();
               }}
             />
-          ) : myLeagues.status === "ready" && drawer.kind === "register-player" ? (
+          ) : myLeagues.status === "ready" &&
+            (drawer.kind === "register-player" || drawer.kind === "edit-player") ? (
             <NewPlayerForm
-              key={`player-${playerFormKey}`}
+              key={
+                drawer.kind === "edit-player"
+                  ? `edit-player-${drawer.leagueId}-${drawer.teamId}-${drawer.playerId}`
+                  : `player-${playerFormKey}`
+              }
               teamRows={myLeagues.teams}
-              prefillTeamId={drawer.prefillTeamId}
+              prefillTeamId={drawer.kind === "register-player" ? drawer.prefillTeamId : undefined}
+              editTarget={
+                drawer.kind === "edit-player"
+                  ? {
+                      leagueId: drawer.leagueId,
+                      teamId: drawer.teamId,
+                      playerId: drawer.playerId,
+                    }
+                  : null
+              }
               onClose={closeDrawer}
+              onBusyChange={setDrawerBusy}
               onPlayerCreated={() => {
-                onLeagueCreated?.();
                 closeDrawer();
+                onLeagueCreated?.();
               }}
             />
           ) : null}

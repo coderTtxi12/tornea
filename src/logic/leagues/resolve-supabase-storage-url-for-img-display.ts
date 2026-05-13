@@ -1,7 +1,43 @@
+import { playerProfileImageUrl } from "@/lib/players/player-profile-photo";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /** Misma ventana que los escudos de liga en el dashboard. */
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+function playerPhotoBucketAndPath(metadata: unknown): { bucket: string; path: string } | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const raw = (metadata as Record<string, unknown>).photo;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const bucket = typeof o.bucket === "string" ? o.bucket.trim() : "";
+  const path = typeof o.path === "string" ? o.path.replace(/^\/+/, "").trim() : "";
+  if (!bucket || !path) return null;
+  return { bucket, path };
+}
+
+/**
+ * Foto de jugador: `metadata.photo` guarda `{ bucket, path, publicUrl }` (PlayerFileRef).
+ * Igual que los escudos, firmamos con `bucket` + `path`; parsear solo `publicUrl` falla si la URL
+ * no coincide con el patrón esperado (p. ej. otro host o forma de path).
+ */
+export async function resolvePlayerPhotoForImgDisplay(metadata: unknown): Promise<string | null> {
+  const ref = playerPhotoBucketAndPath(metadata);
+  const service = createServiceRoleClient();
+  if (ref && service) {
+    try {
+      const { data, error } = await service.storage
+        .from(ref.bucket)
+        .createSignedUrl(ref.path, SIGNED_URL_TTL_SECONDS);
+      if (!error && data?.signedUrl) {
+        return data.signedUrl;
+      }
+    } catch {
+      /* fallback */
+    }
+  }
+  const fromPublicField = playerProfileImageUrl(metadata);
+  return resolveSupabaseStorageUrlForImgDisplay(fromPublicField);
+}
 
 /**
  * URLs de `getPublicUrl` tienen forma

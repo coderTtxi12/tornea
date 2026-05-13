@@ -13,6 +13,10 @@ type DashboardRightSlideoverProps = {
   children: ReactNode;
   /** Ancho máximo del panel. Por defecto `lg` (~32rem). */
   size?: DashboardRightSlideoverSize;
+  /**
+   * Si es true, no se cierra por clic fuera, ✕ ni Escape (p. ej. guardando en curso).
+   */
+  preventClose?: boolean;
 };
 
 const SIZE_CLASS: Record<DashboardRightSlideoverSize, string> = {
@@ -34,11 +38,12 @@ export function DashboardRightSlideover({
   onClose,
   children,
   size = "lg",
+  preventClose = false,
 }: DashboardRightSlideoverProps) {
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !preventClose) onClose();
     };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -47,17 +52,24 @@ export function DashboardRightSlideover({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open, onClose, preventClose]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex justify-end" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-[100] flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-busy={preventClose}
+    >
       <button
         type="button"
-        className="absolute inset-0 bg-black/50 backdrop-blur-[1px]"
-        aria-label="Cerrar panel"
-        onClick={onClose}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[1px] ${preventClose ? "cursor-wait" : ""}`}
+        aria-label={preventClose ? "Guardando…" : "Cerrar panel"}
+        onClick={() => {
+          if (!preventClose) onClose();
+        }}
       />
       <aside
         className={`border-border bg-background relative z-[1] flex h-full w-full ${SIZE_CLASS[size]} flex-col border-l shadow-2xl`}
@@ -67,8 +79,11 @@ export function DashboardRightSlideover({
             <h2 className="text-lg font-bold tracking-tight">{title}</h2>
             <button
               type="button"
-              onClick={onClose}
-              className="text-foreground-muted hover:text-foreground rounded-full p-1.5 text-sm font-medium"
+              onClick={() => {
+                if (!preventClose) onClose();
+              }}
+              disabled={preventClose}
+              className="text-foreground-muted hover:text-foreground rounded-full p-1.5 text-sm font-medium disabled:pointer-events-none disabled:opacity-40"
               aria-label="Cerrar"
             >
               ✕

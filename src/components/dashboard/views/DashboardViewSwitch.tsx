@@ -2,7 +2,11 @@
 
 import type { DashboardNavKey } from "../nav";
 
-import type { MyLeaguesApiItem, MyLeaguesTeamRow } from "../leagues/my-leagues-state";
+import type {
+  MyLeaguesApiItem,
+  MyLeaguesPlayerRow,
+  MyLeaguesTeamRow,
+} from "../leagues/my-leagues-state";
 
 import { DashboardDisciplineView } from "./DashboardDisciplineView";
 import { DashboardFixtureView } from "./DashboardFixtureView";
@@ -20,20 +24,28 @@ export function DashboardViewSwitch({
   nav,
   leagueOrgCards,
   teamRows,
+  playerRows,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
   onOpenRegisterPlayerDrawer,
+  onOpenEditPlayerDrawer,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
   teamRows: readonly MyLeaguesTeamRow[];
+  playerRows: readonly MyLeaguesPlayerRow[];
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
   onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
+  onOpenEditPlayerDrawer: (args: {
+    leagueId: string;
+    teamId: string;
+    playerId: string;
+  }) => void;
 }) {
   switch (nav) {
     case "home":
@@ -61,8 +73,10 @@ export function DashboardViewSwitch({
     case "players":
       return (
         <DashboardPlayersView
+          playerRows={playerRows}
           hasTeams={teamRows.length > 0}
           onOpenRegisterPlayerDrawer={onOpenRegisterPlayerDrawer}
+          onOpenEditPlayerDrawer={onOpenEditPlayerDrawer}
         />
       );
     case "venues":

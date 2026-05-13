@@ -12,56 +12,101 @@ import {
   parseOptionalShirtNumber,
 } from "@/components/dashboard/leagues/new-player-form-schema";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
-import {
-  createPlayerInTeam,
-  deletePlayerById,
-  mergePlayerMetadata,
-} from "@/logic/players/create-player-in-team";
+import { mergePlayerMetadata } from "@/logic/players/create-player-in-team";
+import { getPlayerForOwnerEdit } from "@/logic/players/get-player-for-owner-edit";
 import { tryRemovePlayerFiles, uploadPlayerFile } from "@/logic/players/upload-player-files";
+import { updatePlayerForOwner } from "@/logic/players/update-player-for-owner";
 import { leagueShieldStorageBucket } from "@/logic/leagues/upload-league-shield";
+import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { splitE164ToCountryAndNational } from "@/lib/phone/e164-split";
 
 function readFormString(form: FormData, name: string): string {
   const v = form.get(name);
   return typeof v === "string" ? v : "";
 }
 
-/** Código PostgreSQL en la cadena de `cause` (Drizzle / node-pg). */
-function pgErrorCode(err: unknown): string | undefined {
-  let cur: unknown = err;
-  for (let depth = 0; depth < 6 && cur != null; depth++) {
-    if (
-      typeof cur === "object" &&
-      "code" in cur &&
-      typeof (cur as { code: unknown }).code === "string"
-    ) {
-      return (cur as { code: string }).code;
+/**
+ * GET — jugador + plantilla en temporada objetivo (solo dueño de la liga).
+ */
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ leagueId: string; teamId: string; playerId: string }> },
+) {
+  try {
+    const { leagueId, teamId, playerId } = await context.params;
+    if (!leagueId || !teamId || !playerId) {
+      return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
-    if (typeof cur === "object" && cur !== null && "cause" in cur) {
-      cur = (cur as { cause: unknown }).cause;
-    } else {
-      break;
+
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+
+    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const result = await getPlayerForOwnerEdit(appUser.id, leagueId, teamId, playerId);
+
+    if (result === "FORBIDDEN") {
+      return NextResponse.json({ error: "No tenés permiso." }, { status: 403 });
+    }
+    if (result === "NOT_FOUND") {
+      return NextResponse.json({ error: "Jugador no encontrado." }, { status: 404 });
+    }
+
+    const meta =
+      result.player.metadata &&
+      typeof result.player.metadata === "object" &&
+      !Array.isArray(result.player.metadata)
+        ? (result.player.metadata as Record<string, unknown>)
+        : {};
+
+    const e164 =
+      typeof meta.whatsappE164 === "string" && meta.whatsappE164.trim()
+        ? meta.whatsappE164.trim()
+        : "";
+    const { iso2, nationalDigits } = splitE164ToCountryAndNational(e164);
+
+    const photoUrl = await resolvePlayerPhotoForImgDisplay(result.player.metadata);
+
+    return NextResponse.json({
+      player: {
+        id: result.player.id,
+        leagueId: result.player.leagueId,
+        fullName: result.player.fullName,
+        birthDate: result.player.birthDate,
+        whatsappCountryIso: iso2,
+        whatsappPhoneNational: nationalDigits,
+      },
+      roster: {
+        id: result.roster.id,
+        teamId: result.roster.teamId,
+        shirtNumber: result.roster.shirtNumber,
+        position: result.roster.position,
+      },
+      existingPhotoUrl: photoUrl,
+    });
+  } catch (e) {
+    console.error("[GET .../players/[playerId]]", e);
+    return NextResponse.json({ error: "No se pudo cargar el jugador." }, { status: 500 });
   }
-  return undefined;
 }
 
 /**
- * POST — alta de jugador en un equipo (`players` + `team_rosters`).
- * Multipart: campos de texto + archivos opcionales `photo` y `curp`.
- *
- * Solo el dueño de la liga puede agregar jugadores. Si la subida de un archivo falla,
- * se hace rollback del jugador (DELETE cascadeará team_rosters).
+ * PATCH — actualizar jugador y fila de plantilla (multipart opcional `photo`, `curp`).
  */
-export async function POST(
+export async function PATCH(
   request: Request,
-  context: { params: Promise<{ leagueId: string; teamId: string }> },
+  context: { params: Promise<{ leagueId: string; teamId: string; playerId: string }> },
 ) {
   try {
-    const { leagueId, teamId } = await context.params;
-    if (!leagueId || !teamId) {
-      return NextResponse.json({ error: "Liga o equipo no válidos." }, { status: 400 });
+    const { leagueId, teamId, playerId } = await context.params;
+    if (!leagueId || !teamId || !playerId) {
+      return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
     const supabase = await createSupabaseServerClient();
@@ -102,47 +147,23 @@ export async function POST(
       data.whatsappPhoneNational,
     );
 
-    let created: { playerId: string; seasonId: string; teamRosterId: string };
-    try {
-      created = await createPlayerInTeam({
-        ownerUserId: appUser.id,
-        leagueId,
-        teamId,
-        fullName: data.fullName,
-        birthDate: data.birthDate.trim(),
-        shirtNumber: parseOptionalShirtNumber(data.shirtNumber),
-        position: data.position ?? null,
-        whatsappE164,
-      });
-    } catch (e) {
-      if (e instanceof Error && e.message === "FORBIDDEN") {
-        return NextResponse.json(
-          { error: "No tenés permiso para esta liga." },
-          { status: 403 },
-        );
-      }
-      if (e instanceof Error && e.message === "TEAM_NOT_FOUND") {
-        return NextResponse.json({ error: "Equipo no encontrado." }, { status: 404 });
-      }
-      if (e instanceof Error && e.message === "TEAM_LEAGUE_MISMATCH") {
-        return NextResponse.json(
-          { error: "El equipo no pertenece a esta liga." },
-          { status: 400 },
-        );
-      }
-      if (pgErrorCode(e) === "42703") {
-        console.error("[POST .../players] Postgres undefined_column (¿migraciones pendientes?)", e);
-        return NextResponse.json(
-          {
-            error:
-              "La columna `players.metadata` no existe en **esta** base de datos. En el repo ya está definida en Drizzle (migración `0003_football_match_details`: `ALTER TABLE players ADD COLUMN metadata …`). Falta aplicarla aquí: `npm run db:migrate` usando la **misma** `DATABASE_URL` que Next (`.env` / `.env.local`). Si migrate dice que no hay nada pendiente pero el error sigue, Next y migrate apuntan a bases distintas — verificá con `npm run db:check:players-metadata`. Parche manual: `npm run db:apply:sql -- scripts/sql/ensure-players-metadata.sql`.",
-            hintSql:
-              'ALTER TABLE "players" ADD COLUMN IF NOT EXISTS "metadata" jsonb DEFAULT \'{}\'::jsonb NOT NULL;',
-          },
-          { status: 503 },
-        );
-      }
-      throw e;
+    const updated = await updatePlayerForOwner({
+      ownerUserId: appUser.id,
+      leagueId,
+      teamId,
+      playerId,
+      fullName: data.fullName,
+      birthDate: data.birthDate.trim(),
+      shirtNumber: parseOptionalShirtNumber(data.shirtNumber),
+      position: data.position ?? null,
+      whatsappE164,
+    });
+
+    if (updated === "FORBIDDEN") {
+      return NextResponse.json({ error: "No tenés permiso para esta liga." }, { status: 403 });
+    }
+    if (updated === "NOT_FOUND") {
+      return NextResponse.json({ error: "Jugador no encontrado." }, { status: 404 });
     }
 
     const photoEntry = form.get("photo");
@@ -155,14 +176,12 @@ export async function POST(
     }> = [];
     if (photoEntry instanceof File && photoEntry.size > 0) {
       if (photoEntry.size > PLAYER_PHOTO_MAX_FILE_BYTES) {
-        await deletePlayerById(created.playerId);
         return NextResponse.json(
           { error: "La foto del jugador supera el tamaño máximo permitido." },
           { status: 400 },
         );
       }
       if (!PLAYER_PHOTO_MIME_TYPES.has(photoEntry.type)) {
-        await deletePlayerById(created.playerId);
         return NextResponse.json(
           { error: "La foto debe ser JPG, PNG o WebP." },
           { status: 400 },
@@ -172,14 +191,12 @@ export async function POST(
     }
     if (curpEntry instanceof File && curpEntry.size > 0) {
       if (curpEntry.size > PLAYER_CURP_MAX_FILE_BYTES) {
-        await deletePlayerById(created.playerId);
         return NextResponse.json(
           { error: "El archivo de CURP supera el tamaño máximo permitido." },
           { status: 400 },
         );
       }
       if (!PLAYER_CURP_MIME_TYPES.has(curpEntry.type)) {
-        await deletePlayerById(created.playerId);
         return NextResponse.json(
           { error: "La CURP debe ser PDF, JPG, PNG o WebP." },
           { status: 400 },
@@ -192,7 +209,6 @@ export async function POST(
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
       const storageClient = service ?? supabase;
-
       const uploadedPaths: string[] = [];
       const metadataPatch: Record<string, unknown> = {};
 
@@ -202,7 +218,7 @@ export async function POST(
           const ref = await uploadPlayerFile(storageClient, {
             bucket,
             ownerUserId: appUser.id,
-            playerId: created.playerId,
+            playerId,
             kind: item.kind,
             bytes,
             contentType: item.file.type,
@@ -210,31 +226,23 @@ export async function POST(
           uploadedPaths.push(ref.path);
           metadataPatch[item.metadataKey] = ref;
         }
-
-        await mergePlayerMetadata(created.playerId, metadataPatch);
+        await mergePlayerMetadata(playerId, metadataPatch);
       } catch (err) {
-        console.error(
-          "[POST /api/leagues/[leagueId]/teams/[teamId]/players] file upload",
-          err,
-        );
+        console.error("[PATCH .../players/[playerId]] file upload", err);
         await tryRemovePlayerFiles(storageClient, bucket, uploadedPaths);
-        await deletePlayerById(created.playerId);
         return NextResponse.json(
           {
             error:
-              "No se pudo guardar el archivo en Storage. El jugador no se guardó. Revisa el bucket o la clave de servicio.",
+              "No se pudo guardar el archivo en Storage. Los datos del jugador sí se actualizaron.",
           },
           { status: 503 },
         );
       }
     }
 
-    return NextResponse.json(
-      { player: { id: created.playerId } },
-      { status: 201 },
-    );
+    return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("[POST /api/leagues/[leagueId]/teams/[teamId]/players]", e);
-    return NextResponse.json({ error: "No se pudo agregar al jugador." }, { status: 500 });
+    console.error("[PATCH .../players/[playerId]]", e);
+    return NextResponse.json({ error: "No se pudo actualizar al jugador." }, { status: 500 });
   }
 }

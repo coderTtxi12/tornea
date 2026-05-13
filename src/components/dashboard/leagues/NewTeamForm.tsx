@@ -21,6 +21,7 @@ type NewTeamFormProps = {
   leagues: readonly MyLeaguesApiItem[];
   onClose: () => void;
   onTeamCreated?: () => void;
+  onBusyChange?: (busy: boolean) => void;
   /** Modo edición: carga GET y guarda con PATCH */
   editTarget?: { leagueId: string; teamId: string } | null;
 };
@@ -29,6 +30,7 @@ export function NewTeamForm({
   leagues,
   onClose,
   onTeamCreated,
+  onBusyChange,
   editTarget = null,
 }: NewTeamFormProps) {
   const isEdit = Boolean(editTarget);
@@ -65,6 +67,16 @@ export function NewTeamForm({
   const [crestError, setCrestError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange?.(false);
+    };
+  }, [onBusyChange]);
 
   useEffect(() => {
     if (isEdit) return;

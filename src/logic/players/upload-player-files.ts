@@ -9,19 +9,21 @@ export type PlayerFileRef = {
   contentType: string;
 };
 
+export type PlayerStorageFileKind = "photo" | "curp";
+
 type UploadArgs = {
   bucket: string;
   ownerUserId: string;
   playerId: string;
-  /** Subcarpeta usada como nombre base. */
-  kind: "photo" | "curp";
+  /** Nombre base del objeto en Storage (`photo.jpg`, `curp.pdf`, …). */
+  kind: PlayerStorageFileKind;
   bytes: Uint8Array;
   contentType: string;
 };
 
 /**
  * Sube un archivo del jugador (foto o CURP) al bucket de Storage.
- * Path: `{ownerUserId}/players/{playerId}/{kind}.{ext}`.
+ * Path: `{ownerUserId}/players/{playerId}/{kind}.{ext}` (`photo`, `curp`).
  *
  * Si el bucket es público, `publicUrl` queda accesible directo. Si es privado, hay
  * que firmar la URL más adelante (igual que el escudo de la liga).

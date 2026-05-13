@@ -1,21 +1,34 @@
 "use client";
 
-import { MOCK_PLAYER_ROWS } from "../dashboard-mock-data";
-import {
-  DashboardViewHeader,
-  floatCard,
-  MockActionButton,
-} from "./dashboard-view-primitives";
+import { useRef, useState } from "react";
 
-type DashboardPlayersViewProps = {
-  hasTeams: boolean;
-  onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
-};
+import {
+  PlayersFilterableTable,
+  type PlayersFilterableTableHandle,
+} from "@/components/dashboard/tables/players-filterable-table";
+import type { MyLeaguesPlayerRow } from "../leagues/my-leagues-state";
+import { DashboardViewHeader } from "./dashboard-view-primitives";
 
 export function DashboardPlayersView({
+  playerRows,
   hasTeams,
   onOpenRegisterPlayerDrawer,
-}: DashboardPlayersViewProps) {
+  onOpenEditPlayerDrawer,
+}: {
+  playerRows: readonly MyLeaguesPlayerRow[];
+  hasTeams: boolean;
+  onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
+  onOpenEditPlayerDrawer: (args: {
+    leagueId: string;
+    teamId: string;
+    playerId: string;
+  }) => void;
+}) {
+  const tableRef = useRef<PlayersFilterableTableHandle>(null);
+  const [canClearTable, setCanClearTable] = useState(false);
+  const showPlayerTable = hasTeams && playerRows.length > 0;
+  const borrarFiltrosEnabled = showPlayerTable && canClearTable;
+
   return (
     <>
       <DashboardViewHeader
@@ -23,51 +36,48 @@ export function DashboardPlayersView({
         hint="Alineaciones, camisetas y datos de `players` — validar roster por `season_teams`."
         actions={
           <>
-            <MockActionButton variant="secondary">Buscar</MockActionButton>
+            <button
+              type="button"
+              disabled={!borrarFiltrosEnabled}
+              title={
+                borrarFiltrosEnabled
+                  ? "Quita filtros de columnas y restablece el orden (Jugador A→Z, ascendente)"
+                  : "No hay filtros ni cambios de orden que limpiar"
+              }
+              onClick={() => tableRef.current?.clearAllFilters()}
+              className="border-border bg-background-muted/50 text-foreground cursor-pointer rounded-full border px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Borrar filtros
+            </button>
             <button
               type="button"
               onClick={() => onOpenRegisterPlayerDrawer()}
               disabled={!hasTeams}
               title={hasTeams ? undefined : "Primero crea un equipo"}
-              className="rounded-full bg-brand-blue px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="cursor-pointer rounded-full bg-brand-blue px-5 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Agregar jugador
             </button>
           </>
         }
       />
-      <div className={`${floatCard} overflow-x-auto`}>
-        <table className="w-full min-w-[32rem] text-left text-sm">
-          <thead>
-            <tr className="text-foreground-muted border-border border-b text-[11px] font-bold tracking-wide uppercase">
-              <th className="px-4 py-3">#</th>
-              <th className="px-4 py-3">Jugador</th>
-              <th className="px-4 py-3">Club</th>
-              <th className="px-4 py-3">Pos.</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-border divide-y">
-            {MOCK_PLAYER_ROWS.map((p) => (
-              <tr key={p.id} className="hover:bg-surface-code/20">
-                <td className="text-foreground-muted px-4 py-2.5 tabular-nums">{p.number}</td>
-                <td className="px-4 py-2.5 font-medium">{p.name}</td>
-                <td className="text-foreground-muted px-4 py-2.5">{p.teamShort}</td>
-                <td className="px-4 py-2.5">
-                  <span className="border-border bg-surface-code/50 rounded-md border px-2 py-0.5 text-xs font-semibold">
-                    {p.position}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <MockActionButton variant="ghost" className="!p-0 !text-xs">
-                    Ver ficha
-                  </MockActionButton>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {!hasTeams ? (
+        <p className="text-foreground-muted text-sm">
+          Primero registrá un equipo en la sección Equipos; después podés agregar jugadores a la plantilla.
+        </p>
+      ) : playerRows.length === 0 ? (
+        <p className="text-foreground-muted text-sm">
+          No hay jugadores en plantilla para la temporada actual de tus ligas. Usá &quot;Agregar jugador&quot;
+          para incorporar el primero.
+        </p>
+      ) : (
+        <PlayersFilterableTable
+          ref={tableRef}
+          playerRows={playerRows}
+          onEditPlayer={onOpenEditPlayerDrawer}
+          onHasActiveFiltersChange={setCanClearTable}
+        />
+      )}
     </>
   );
 }

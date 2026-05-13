@@ -1,6 +1,7 @@
 export type {
   DashboardMyLeaguesState,
   MyLeaguesApiItem,
+  MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
 } from "./my-leagues-state";
 export { DashboardEmptyLeaguesPanel } from "./DashboardEmptyLeaguesPanel";

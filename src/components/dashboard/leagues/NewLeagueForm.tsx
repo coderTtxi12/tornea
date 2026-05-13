@@ -20,6 +20,7 @@ type NewLeagueFormProps = {
   onCancel: () => void;
   /** Tras crear la liga correctamente (refetch del dashboard). */
   onLeagueCreated?: () => void;
+  onBusyChange?: (busy: boolean) => void;
   /** En panel lateral: oculta el título duplicado (el drawer ya lo muestra). */
   variant?: "standalone" | "drawer";
 };
@@ -27,6 +28,7 @@ type NewLeagueFormProps = {
 export function NewLeagueForm({
   onCancel,
   onLeagueCreated,
+  onBusyChange,
   variant = "standalone",
 }: NewLeagueFormProps) {
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -45,6 +47,16 @@ export function NewLeagueForm({
   const [shieldError, setShieldError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange?.(false);
+    };
+  }, [onBusyChange]);
 
   const shieldPreviewUrl = useMemo(() => {
     if (!shield) return null;

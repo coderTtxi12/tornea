@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   leagueCategoryGenderOptions,
@@ -12,6 +12,7 @@ type NewLeagueCategoryFormProps = {
   leagueName: string;
   onClose: () => void;
   onCategoryCreated?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 };
 
 function parseOptionalBirthYear(raw: string): number | null | "invalid" {
@@ -35,6 +36,7 @@ export function NewLeagueCategoryForm({
   leagueName,
   onClose,
   onCategoryCreated,
+  onBusyChange,
 }: NewLeagueCategoryFormProps) {
   const idempotencyKeyRef = useRef<string | null>(null);
 
@@ -49,6 +51,16 @@ export function NewLeagueCategoryForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange?.(false);
+    };
+  }, [onBusyChange]);
 
   function resetForm() {
     setName("");

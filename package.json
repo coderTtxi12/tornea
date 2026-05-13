@@ -10,6 +10,8 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.cjs",
+    "db:check:players-metadata": "node scripts/check-players-metadata.cjs",
+    "db:apply:sql": "node scripts/run-sql-file.cjs",
     "db:seed:dashboard-user": "node scripts/seed-dashboard-access-user.cjs",
     "db:studio": "drizzle-kit studio"
   },
@@ -36,5 +38,6 @@
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "packageManager": "pnpm@9.2.0+sha512.98a80fd11c2e7096747762304106432b3ddc67dcf54b5a8c01c93f68a2cd5e05e6821849522a06fb76284d41a2660d5e334f2ee3bbf29183bf2e739b1dafa771"
 }

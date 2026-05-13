@@ -22,8 +22,12 @@ type NewPlayerFormProps = {
   teamRows: readonly MyLeaguesTeamRow[];
   onClose: () => void;
   onPlayerCreated?: () => void;
+  /** Avisa al drawer cuando hay guardado en curso (bloquea cerrar el panel). */
+  onBusyChange?: (busy: boolean) => void;
   /** Si viene, el equipo queda preseleccionado y el dropdown bloqueado. */
   prefillTeamId?: string;
+  /** Edición: mismo patrón que equipos (GET + PATCH). */
+  editTarget?: { leagueId: string; teamId: string; playerId: string } | null;
 };
 
 /**
@@ -101,25 +105,36 @@ export function NewPlayerForm({
   teamRows,
   onClose,
   onPlayerCreated,
+  onBusyChange,
   prefillTeamId,
+  editTarget = null,
 }: NewPlayerFormProps) {
+  const isEdit = Boolean(editTarget);
   const countryDialOptions = useMemo(() => getCountryDialOptions(), []);
   const birthDateMax = useMemo(() => localIsoDateString(), []);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const curpInputRef = useRef<HTMLInputElement>(null);
 
   const initialTeamId = useMemo<string>(() => {
+    if (editTarget?.teamId && teamRows.some((t) => t.id === editTarget.teamId)) {
+      return editTarget.teamId;
+    }
     if (prefillTeamId && teamRows.some((t) => t.id === prefillTeamId)) {
       return prefillTeamId;
     }
     return teamRows.length === 1 ? teamRows[0]!.id : "";
-  }, [prefillTeamId, teamRows]);
+  }, [editTarget, prefillTeamId, teamRows]);
 
   const [teamId, setTeamId] = useState<string>(initialTeamId);
   const [teamSearch, setTeamSearch] = useState<string>(() => {
     const t = teamRows.find((x) => x.id === initialTeamId);
     return t ? teamDisplayLabel(t) : "";
   });
+  const [editLoadState, setEditLoadState] = useState<"idle" | "loading" | "ready" | "error">(
+    () => (isEdit ? "loading" : "ready"),
+  );
+  const [editLoadError, setEditLoadError] = useState<string | null>(null);
+  const [serverExistingPhotoUrl, setServerExistingPhotoUrl] = useState<string | null>(null);
   const [teamListOpen, setTeamListOpen] = useState(false);
   const [teamHighlight, setTeamHighlight] = useState(-1);
   const teamComboWrapRef = useRef<HTMLDivElement>(null);
@@ -135,6 +150,7 @@ export function NewPlayerForm({
 
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const photoPreviewUrlRef = useRef<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [curp, setCurp] = useState<File | null>(null);
@@ -145,16 +161,23 @@ export function NewPlayerForm({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!photo) {
-      setPhotoPreviewUrl(null);
-      return undefined;
-    }
-    const url = URL.createObjectURL(photo);
-    setPhotoPreviewUrl(url);
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+
+  useEffect(() => {
     return () => {
-      URL.revokeObjectURL(url);
+      onBusyChange?.(false);
     };
-  }, [photo]);
+  }, [onBusyChange]);
+
+  function replacePhotoPreview(next: string | null) {
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current);
+      photoPreviewUrlRef.current = null;
+    }
+    photoPreviewUrlRef.current = next;
+    setPhotoPreviewUrl(next);
+  }
 
   const selectedTeam = useMemo(
     () => teamRows.find((t) => t.id === teamId) ?? null,
@@ -168,6 +191,112 @@ export function NewPlayerForm({
     if (!queryNorm) return teamRows;
     return teamRows.filter((t) => teamMatchesQuery(t, queryNorm));
   }, [teamRows, teamSearch, selectedTeam]);
+
+  /** Solo lectura actual de equipos sin meter `teamRows` en deps del efecto de carga (evita “recargar jugador” tras refetch al guardar). */
+  const teamRowsRef = useRef(teamRows);
+  teamRowsRef.current = teamRows;
+
+  const fetchEditLeagueId = editTarget?.leagueId ?? null;
+  const fetchEditTeamId = editTarget?.teamId ?? null;
+  const fetchEditPlayerId = editTarget?.playerId ?? null;
+
+  useEffect(() => {
+    if (!fetchEditLeagueId || !fetchEditTeamId || !fetchEditPlayerId) {
+      return;
+    }
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEditLoadState("loading");
+      setEditLoadError(null);
+      setServerExistingPhotoUrl(null);
+      setPhoto(null);
+      replacePhotoPreview(null);
+      setCurp(null);
+      setPhotoError(null);
+      setCurpError(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      if (curpInputRef.current) curpInputRef.current.value = "";
+
+      setTeamId(fetchEditTeamId);
+      const rowTeam = teamRowsRef.current.find((t) => t.id === fetchEditTeamId);
+      if (rowTeam) {
+        setTeamSearch(teamDisplayLabel(rowTeam));
+      }
+
+      void (async () => {
+      try {
+        const res = await fetch(
+          `/api/leagues/${encodeURIComponent(fetchEditLeagueId)}/teams/${encodeURIComponent(fetchEditTeamId)}/players/${encodeURIComponent(fetchEditPlayerId)}`,
+        );
+        let data: {
+          player?: {
+            fullName: string;
+            birthDate: string;
+            whatsappCountryIso: string;
+            whatsappPhoneNational: string;
+          };
+          roster?: { shirtNumber: number | null; position: string | null };
+          existingPhotoUrl?: string | null;
+          error?: string;
+        } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+        if (cancelled) return;
+        if (res.status === 401) {
+          window.location.href = "/";
+          return;
+        }
+        if (!res.ok || !data.player || !data.roster) {
+          setEditLoadError(
+            typeof data.error === "string" ? data.error : "No se pudo cargar el jugador.",
+          );
+          setEditLoadState("error");
+          return;
+        }
+        setFullName(data.player.fullName);
+        setBirthDate(data.player.birthDate);
+        setShirtNumber(data.roster.shirtNumber == null ? "" : String(data.roster.shirtNumber));
+        const pos = data.roster.position?.trim() ?? "";
+        const presetMatch = PLAYER_POSITION_PRESETS.find((p) => p.value === pos);
+        if (!pos) {
+          setPositionPreset("");
+          setPositionCustom("");
+        } else if (presetMatch) {
+          setPositionPreset(presetMatch.value);
+          setPositionCustom("");
+        } else {
+          setPositionPreset(POSITION_OTHER_VALUE);
+          setPositionCustom(pos);
+        }
+        setWhatsappCountryIso(
+          data.player.whatsappCountryIso?.length === 2
+            ? data.player.whatsappCountryIso.toUpperCase()
+            : DEFAULT_WHATSAPP_COUNTRY_ISO2,
+        );
+        setWhatsappPhone(data.player.whatsappPhoneNational ?? "");
+        const main = data.existingPhotoUrl;
+        setServerExistingPhotoUrl(
+          typeof main === "string" && main.trim() ? main.trim() : null,
+        );
+        setEditLoadState("ready");
+      } catch {
+        if (!cancelled) {
+          setEditLoadError("Error de red al cargar el jugador.");
+          setEditLoadState("error");
+        }
+      }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchEditLeagueId, fetchEditTeamId, fetchEditPlayerId]);
 
   useEffect(() => {
     if (!teamListOpen) return;
@@ -197,7 +326,7 @@ export function NewPlayerForm({
   }
 
   function clearTeamSelection() {
-    if (prefillTeamId) return;
+    if (prefillTeamId || isEdit) return;
     setTeamId("");
     setTeamSearch("");
     setTeamListOpen(true);
@@ -241,21 +370,25 @@ export function NewPlayerForm({
     setPhotoError(null);
     if (!file) {
       setPhoto(null);
+      replacePhotoPreview(null);
       return;
     }
     if (!PLAYER_PHOTO_MIME_TYPES.has(file.type)) {
       setPhoto(null);
+      replacePhotoPreview(null);
       setPhotoError("Usa JPG, PNG o WebP.");
       return;
     }
     if (file.size > PLAYER_PHOTO_MAX_FILE_BYTES) {
       setPhoto(null);
+      replacePhotoPreview(null);
       setPhotoError(
         `La foto supera ${Math.round(PLAYER_PHOTO_MAX_FILE_BYTES / (1024 * 1024))} MB.`,
       );
       return;
     }
     setPhoto(file);
+    replacePhotoPreview(URL.createObjectURL(file));
   }
 
   function onCurpChange(file: File | null) {
@@ -294,11 +427,14 @@ export function NewPlayerForm({
     setWhatsappCountryIso(DEFAULT_WHATSAPP_COUNTRY_ISO2);
     setWhatsappPhone("");
     setPhoto(null);
+    replacePhotoPreview(null);
     setCurp(null);
     setPhotoError(null);
     setCurpError(null);
     setFieldErrors({});
     setSubmitError(null);
+    setSubmitting(false);
+    setServerExistingPhotoUrl(null);
     if (photoInputRef.current) photoInputRef.current.value = "";
     if (curpInputRef.current) curpInputRef.current.value = "";
   }
@@ -327,6 +463,11 @@ export function NewPlayerForm({
       return;
     }
 
+    setTeamListOpen(false);
+    setTeamHighlight(-1);
+
+    setSubmitting(true);
+
     const fd = new FormData();
     fd.set("fullName", fullName);
     fd.set("birthDate", birthDate);
@@ -334,13 +475,16 @@ export function NewPlayerForm({
     fd.set("position", positionToSubmit);
     fd.set("whatsappCountryIso", whatsappCountryIso);
     fd.set("whatsappPhoneNational", whatsappPhone);
-    if (photo) fd.set("photo", photo);
+    if (photo) {
+      fd.set("photo", photo);
+    }
     if (curp) fd.set("curp", curp);
 
-    setSubmitting(true);
     try {
-      const url = `/api/leagues/${encodeURIComponent(selectedTeam.leagueId)}/teams/${encodeURIComponent(selectedTeam.id)}/players`;
-      const res = await fetch(url, { method: "POST", body: fd });
+      const url = isEdit
+        ? `/api/leagues/${encodeURIComponent(selectedTeam.leagueId)}/teams/${encodeURIComponent(selectedTeam.id)}/players/${encodeURIComponent(editTarget!.playerId)}`
+        : `/api/leagues/${encodeURIComponent(selectedTeam.leagueId)}/teams/${encodeURIComponent(selectedTeam.id)}/players`;
+      const res = await fetch(url, { method: isEdit ? "PATCH" : "POST", body: fd });
 
       let data: { error?: string; fields?: Record<string, string> } = {};
       try {
@@ -361,13 +505,17 @@ export function NewPlayerForm({
         setSubmitError(
           typeof data.error === "string"
             ? data.error
-            : "No se pudo agregar al jugador. Inténtalo de nuevo.",
+            : isEdit
+              ? "No se pudo actualizar al jugador. Inténtalo de nuevo."
+              : "No se pudo agregar al jugador. Inténtalo de nuevo.",
         );
         return;
       }
 
       onPlayerCreated?.();
-      resetForm();
+      if (!isEdit) {
+        resetForm();
+      }
       onClose();
     } finally {
       setSubmitting(false);
@@ -392,16 +540,65 @@ export function NewPlayerForm({
     );
   }
 
+  if (isEdit && editLoadState === "loading") {
+    return (
+      <div className="flex min-h-[14rem] flex-col items-center justify-center gap-3">
+        <div
+          className="border-brand-teal size-10 animate-spin rounded-full border-2 border-t-transparent"
+          aria-label="Cargando"
+          role="status"
+        />
+        <p className="text-foreground-muted text-sm">Cargando jugador…</p>
+      </div>
+    );
+  }
+
+  if (isEdit && editLoadState === "error") {
+    return (
+      <div className="w-full space-y-4">
+        <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-3 text-sm">
+          {editLoadError ?? "No se pudo cargar el jugador."}
+        </div>
+        <button
+          type="button"
+          className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2 text-sm font-medium"
+          onClick={onClose}
+        >
+          Cerrar
+        </button>
+      </div>
+    );
+  }
+
+  const displayPhotoUrl = photoPreviewUrl ?? serverExistingPhotoUrl;
+
   return (
     <div className="w-full">
       <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
-        El jugador se guarda en <span className="text-foreground font-medium">players</span>{" "}
-        (nombre, fecha de nacimiento) y se inscribe en la plantilla del equipo (
-        <span className="text-foreground font-medium">team_rosters</span>) en la temporada
-        objetivo de la liga. La foto y la CURP se suben al bucket de Storage.
+        {isEdit ? (
+          <>
+            Modificá los datos del jugador en{" "}
+            <span className="text-foreground font-medium">players</span> y la plantilla (
+            <span className="text-foreground font-medium">team_rosters</span>) en la temporada
+            actual. Podés subir nueva foto o CURP; si no tocás los archivos, se conservan los
+            actuales.
+          </>
+        ) : (
+          <>
+            El jugador se guarda en <span className="text-foreground font-medium">players</span>{" "}
+            (nombre, fecha de nacimiento) y se inscribe en la plantilla del equipo (
+            <span className="text-foreground font-medium">team_rosters</span>) en la temporada
+            objetivo de la liga. La foto y la CURP se suben aparte al bucket de Storage si las
+            adjuntás.
+          </>
+        )}
       </p>
 
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+      <form
+        className={`relative flex flex-col gap-4 ${submitting ? "pointer-events-none" : ""}`}
+        onSubmit={handleSubmit}
+        aria-busy={submitting}
+      >
         {submitError ? (
           <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-2.5 text-sm">
             {submitError}
@@ -452,16 +649,17 @@ export function NewPlayerForm({
               onKeyDown={onTeamSearchKeyDown}
               placeholder="Busca por equipo, liga o categoría…"
               required
-              disabled={Boolean(prefillTeamId)}
+              disabled={Boolean(prefillTeamId) || isEdit || submitting}
               className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-9 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-70"
               aria-invalid={!!fieldErrors.teamId}
             />
-            {teamId && !prefillTeamId ? (
+            {teamId && !prefillTeamId && !isEdit ? (
               <button
                 type="button"
                 onClick={clearTeamSelection}
+                disabled={submitting}
                 aria-label="Limpiar selección de equipo"
-                className="text-foreground-muted hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1.5"
+                className="text-foreground-muted hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1.5 disabled:opacity-40"
               >
                 <CloseIcon />
               </button>
@@ -474,7 +672,7 @@ export function NewPlayerForm({
               </span>
             )}
 
-            {teamListOpen && !prefillTeamId ? (
+            {teamListOpen && !prefillTeamId && !isEdit && !submitting ? (
               <ul
                 id="player-team-listbox"
                 role="listbox"
@@ -487,7 +685,7 @@ export function NewPlayerForm({
                     aria-selected={false}
                     className="text-foreground-muted px-3 py-2.5 text-xs italic"
                   >
-                    Sin coincidencias para "{teamSearch.trim()}". Revisa el nombre del
+                    Sin coincidencias para &quot;{teamSearch.trim()}&quot;. Revisa el nombre del
                     equipo, la liga o la categoría.
                   </li>
                 ) : (
@@ -551,7 +749,8 @@ export function NewPlayerForm({
             required
             autoComplete="off"
             placeholder="Ej. Juan Pérez Hernández"
-            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            disabled={submitting}
+            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
             aria-invalid={!!fieldErrors.fullName}
           />
           {fieldErrors.fullName ? (
@@ -571,7 +770,8 @@ export function NewPlayerForm({
             min="1900-01-01"
             max={birthDateMax}
             autoComplete="bday"
-            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            disabled={submitting}
+            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
             aria-invalid={!!fieldErrors.birthDate}
           />
           {fieldErrors.birthDate ? (
@@ -594,7 +794,8 @@ export function NewPlayerForm({
                 setShirtNumber(d);
               }}
               placeholder="0–999"
-              className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+              disabled={submitting}
+              className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
               aria-invalid={!!fieldErrors.shirtNumber}
             />
             {fieldErrors.shirtNumber ? (
@@ -617,7 +818,8 @@ export function NewPlayerForm({
                     setPositionCustom("");
                   }
                 }}
-                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2"
+                disabled={submitting}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-invalid={!!fieldErrors.position}
               >
                 <option value="">Sin asignar</option>
@@ -643,7 +845,8 @@ export function NewPlayerForm({
                 onChange={(e) => setPositionCustom(e.target.value.slice(0, 60))}
                 placeholder="Captura la posición"
                 autoFocus
-                className="border-border bg-surface-code/40 mt-2 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                disabled={submitting}
+                className="border-border bg-surface-code/40 mt-2 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-invalid={!!fieldErrors.position}
               />
             ) : null}
@@ -669,7 +872,8 @@ export function NewPlayerForm({
                   setWhatsappCountryIso(e.target.value);
                   setWhatsappPhone("");
                 }}
-                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2"
+                disabled={submitting}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {countryDialOptions.map((c) => (
                   <option key={c.iso2} value={c.iso2}>
@@ -693,7 +897,8 @@ export function NewPlayerForm({
               placeholder={
                 whatsappCountryIso.toUpperCase() === "MX" ? "10 dígitos" : "Número local"
               }
-              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 min-w-0 flex-1 rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
+              disabled={submitting}
+              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 min-w-0 flex-1 rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
               aria-invalid={!!fieldErrors.whatsappPhoneNational}
             />
           </div>
@@ -749,16 +954,16 @@ export function NewPlayerForm({
           />
           <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
             JPG, PNG o WebP · máx.{" "}
-            {Math.round(PLAYER_PHOTO_MAX_FILE_BYTES / (1024 * 1024))} MB
+            {Math.round(PLAYER_PHOTO_MAX_FILE_BYTES / (1024 * 1024))} MB.
           </p>
           {photoError ? (
             <span className="text-brand-purple mt-1 block text-xs">{photoError}</span>
           ) : null}
-          {photoPreviewUrl ? (
+          {displayPhotoUrl ? (
             <div className="border-border mt-2 flex justify-center rounded-brand-md border bg-surface-code/20 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={photoPreviewUrl}
+                src={displayPhotoUrl}
                 alt="Vista previa de la foto del jugador"
                 className="max-h-32 max-w-32 rounded-md object-cover"
               />
@@ -771,7 +976,9 @@ export function NewPlayerForm({
             type="button"
             className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
             onClick={() => {
-              resetForm();
+              if (!isEdit) {
+                resetForm();
+              }
               onClose();
             }}
             disabled={submitting}
@@ -783,7 +990,13 @@ export function NewPlayerForm({
             className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
             disabled={submitting || !teamId}
           >
-            {submitting ? "Guardando…" : "Guardar jugador"}
+            {submitting
+              ? isEdit
+                ? "Guardando cambios…"
+                : "Guardando…"
+              : isEdit
+                ? "Guardar cambios"
+                : "Guardar jugador"}
           </button>
         </div>
       </form>

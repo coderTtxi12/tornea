@@ -41,7 +41,28 @@ export type MyLeaguesTeamRow = {
   crestUrl: string | null;
 };
 
+/** Fila de plantilla / jugador (datos reales desde GET /api/leagues/my). */
+export type MyLeaguesPlayerRow = {
+  id: string;
+  playerId: string;
+  leagueId: string;
+  leagueName: string;
+  teamId: string;
+  teamName: string;
+  teamShort: string | null;
+  fullName: string;
+  shirtNumber: number | null;
+  position: string | null;
+  /** Foto de perfil si está en metadata del jugador. */
+  profileImageUrl?: string | null;
+};
+
 export type DashboardMyLeaguesState =
   | { status: "loading" }
   | { status: "error"; message: string; onRetry: () => void }
-  | { status: "ready"; items: readonly MyLeaguesApiItem[]; teams: readonly MyLeaguesTeamRow[] };
+  | {
+      status: "ready";
+      items: readonly MyLeaguesApiItem[];
+      teams: readonly MyLeaguesTeamRow[];
+      players: readonly MyLeaguesPlayerRow[];
+    };

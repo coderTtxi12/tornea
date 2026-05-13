@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Runs Drizzle migrations against DATABASE_URL (Supabase Postgres or local).
- * Loads .env.local then .env (local overrides file wins for duplicate keys only if we load .env first then local - we want local to win).
+ * Carga `.env` y después `.env.local` (este último pisa claves repetidas).
  */
 const path = require("node:path");
 const { config } = require("dotenv");
@@ -35,3 +35,9 @@ execSync("npx drizzle-kit migrate", {
   cwd: root,
   env: { ...process.env },
 });
+
+console.info("");
+console.info(
+  "[db:migrate] Comando terminó bien. (A veces el spinner de Drizzle oculta la línea «migrations applied» en la terminal.)\n" +
+    "  Si en Next seguís viendo «column … does not exist», la base puede ser otra: `npm run db:check:players-metadata`.",
+);

@@ -7,6 +7,7 @@ import { DashboardArenaLayout } from "@/components/dashboard/DashboardArenaLayou
 import type {
   DashboardMyLeaguesState,
   MyLeaguesApiItem,
+  MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
 } from "@/components/dashboard/leagues/my-leagues-state";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -19,6 +20,7 @@ import {
 type LeaguesMyApiResponse = {
   leagues: MyLeaguesApiItem[];
   teams?: MyLeaguesTeamRow[];
+  players?: MyLeaguesPlayerRow[];
 };
 
 export default function DashboardPage() {
@@ -72,6 +74,7 @@ export default function DashboardPage() {
           status: "ready",
           items: data.leagues ?? [],
           teams: data.teams ?? [],
+          players: data.players ?? [],
         });
       } catch {
         if (!cancelled) {
