@@ -10,6 +10,7 @@ import {
   teamStatusEnumSchema,
 } from "@/components/dashboard/leagues/new-team-form-schema";
 import { getDb } from "@/db/client";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { getTeamForOwnerEdit } from "@/logic/leagues/get-team-for-owner-edit";
@@ -179,6 +180,23 @@ export async function PATCH(
       throw e;
     }
 
+    const teamNameTrim = d.teamName.trim();
+    await recordAppAuditLog(
+      {
+        actorUserId: appUser.id,
+        action: "update",
+        entityType: AppAuditEntityType.team,
+        entityId: teamId,
+        leagueId,
+        summary: `Equipo actualizado: ${teamNameTrim}`,
+        metadata: {
+          teamStatus: parsedStatus.data,
+          leagueCategoryId: d.leagueCategoryId,
+        },
+      },
+      { swallowErrors: true },
+    );
+
     const crestEntry = form.get("crest");
     if (crestEntry instanceof File && crestEntry.size > 0) {
       if (crestEntry.size > LEAGUE_SHIELD_MAX_FILE_BYTES) {
@@ -211,6 +229,18 @@ export async function PATCH(
           bytes,
           contentType: ct,
         });
+        await recordAppAuditLog(
+          {
+            actorUserId: appUser.id,
+            action: "update",
+            entityType: AppAuditEntityType.team,
+            entityId: teamId,
+            leagueId,
+            summary: `Escudo del equipo actualizado: ${teamNameTrim}`,
+            metadata: { subAction: "team_crest" },
+          },
+          { swallowErrors: true },
+        );
       } catch (err) {
         console.error("[PATCH .../teams/[teamId]] crest upload", err);
         return NextResponse.json(

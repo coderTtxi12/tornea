@@ -2,7 +2,7 @@
 
 Complete reference for PostgreSQL (Drizzle ORM): **enums**, **tables**, **columns**, plus **business conventions** the schema does not enforce by itself.
 
-**Source of truth in code:** `src/db/schema.ts` (line-accurate types and FK behavior). Migrations: `drizzle/`. Apply: `npm run db:migrate` (via `scripts/migrate.cjs`, loads `.env` / `.env.local`). After schema edits: `npm run db:generate` for new migrations.
+**Source of truth in code:** `src/db/schema.ts` (line-accurate types and FK behavior). Migrations: `drizzle/`. Apply: `npm run db:migrate` (via `scripts/migrate.cjs`, loads `.env` then `.env.local`, **este último pisa** `DATABASE_URL`). El comando imprime `host:puerto/base` para comprobar que es **la misma** URL que usa Next (`next dev` / despliegue). Si ves errores del tipo «column … does not exist» pero las migraciones “ya están aplicadas», casi siempre es **otra base** o un estado incoherente; existe la migración `0011_matches_sport_code_if_missing` como reparación idempotente para `matches.sport_code`. After schema edits: `npm run db:generate` for new migrations.
 
 ---
 
@@ -515,8 +515,8 @@ Single match in a season.
 | `id` | uuid PK | Match id. |
 | `season_id` | uuid FK → `seasons.id` | Season (cascade delete). |
 | `league_category_id` | uuid FK → `league_categories.id` | Category of this match (set null on delete). Nullable. |
-| `matchday` | integer | Matchday number. |
-| `round_label` | text | Knockout / round label. |
+| `matchday` | integer | Matchday number (jornada). |
+| `round_label` | text | Etiqueta de **fase** del torneo (final, semifinal, liguilla, etc.). **No hay enum en SQL:** la app puede guardar atajos del formulario o texto libre; el producto no infiere automáticamente la fase salvo lo que se capture aquí. |
 | `venue_id` | uuid FK → `venues.id` | Venue (set null on delete). |
 | `scheduled_at` | timestamptz NOT NULL | Kickoff (scheduled). |
 | `timezone` | text NOT NULL DEFAULT `America/Guayaquil` | Interpretation of local fields. |

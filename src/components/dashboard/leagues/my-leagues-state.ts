@@ -12,6 +12,12 @@ export type MyLeagueCategorySummary = {
   createdAt: string;
 };
 
+export type MyLeagueSeasonSummary = {
+  id: string;
+  name: string;
+  status: string;
+};
+
 export type MyLeaguesApiItem = {
   id: string;
   name: string;
@@ -20,6 +26,11 @@ export type MyLeaguesApiItem = {
   sportCode: string;
   sportLabel: string;
   seasonLabel: string;
+  /** IANA, ej. America/Guayaquil — se guarda en `matches.timezone`. */
+  timezone: string;
+  seasons: MyLeagueSeasonSummary[];
+  /** Temporada prioritaria (misma heurística que el resto del panel). */
+  primarySeasonId: string | null;
   seasonFormat: string | null;
   teamsTotal: number;
   matchesPlayed: number;
@@ -39,6 +50,30 @@ export type MyLeaguesTeamRow = {
   status: "active" | "inactive" | "withdrawn";
   categoryName: string | null;
   crestUrl: string | null;
+};
+
+/** Fila de fixture / partidos (GET /api/leagues/my/matches). */
+export type MyLeaguesMatchRow = {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  seasonId: string;
+  seasonName: string;
+  /** ISO 8601 */
+  scheduledAt: string;
+  timezone: string;
+  homeTeamId: string;
+  homeTeamName: string;
+  awayTeamId: string;
+  awayTeamName: string;
+  venueId: string | null;
+  venueName: string | null;
+  matchday: number | null;
+  roundLabel: string | null;
+  leagueCategoryId: string | null;
+  categoryName: string | null;
+  status: string;
+  sportCode: string;
 };
 
 /** Fila de sedes / canchas (datos reales desde GET /api/leagues/my). */

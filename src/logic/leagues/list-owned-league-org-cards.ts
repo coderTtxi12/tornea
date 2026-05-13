@@ -2,7 +2,11 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { leagueCategories, leagues, matches, seasons, teams } from "@/db/schema";
-import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "@/logic/leagues/season-pick";
+import {
+  pickTargetSeasonIdFromCandidates,
+  sortSeasonPickRowsForUi,
+  type SeasonPickRow,
+} from "@/logic/leagues/season-pick";
 
 import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -40,6 +44,12 @@ export type OwnedLeagueOrgCard = {
   sportCode: string;
   sportLabel: string;
   seasonLabel: string;
+  /** Zona horaria IANA de la liga (programación). */
+  timezone: string;
+  /** Temporadas de la liga, ordenadas como en el panel. */
+  seasons: { id: string; name: string; status: string }[];
+  /** `seasons.id` elegida por la misma heurística que el resto del dashboard. */
+  primarySeasonId: string | null;
   seasonFormat: string | null;
   teamsTotal: number;
   matchesPlayed: number;
@@ -131,6 +141,7 @@ export async function listOwnedLeaguesOrganizationCards(
       status: leagues.status,
       sportCode: leagues.sportCode,
       branding: leagues.branding,
+      timezone: leagues.timezone,
     })
     .from(leagues)
     .where(inArray(leagues.id, leagueIdsManaged))
@@ -196,7 +207,8 @@ export async function listOwnedLeaguesOrganizationCards(
     .from(seasons)
     .where(inArray(seasons.leagueId, leagueIds));
 
-  const seasonsByLeague = new Map<string, (typeof seasonRows)[number][]>();
+  type SeasonRowFull = (typeof seasonRows)[number];
+  const seasonsByLeague = new Map<string, SeasonRowFull[]>();
   for (const s of seasonRows) {
     const list = seasonsByLeague.get(s.leagueId) ?? [];
     list.push(s);
@@ -246,11 +258,17 @@ export async function listOwnedLeaguesOrganizationCards(
     owned.map(async (L) => {
       const agg = matchAggByLeague.get(L.id) ?? { played: 0, pending: 0 };
       const list = seasonsByLeague.get(L.id) ?? [];
+      const primarySeasonId = pickTargetSeasonIdFromCandidates(list as SeasonPickRow[]);
+      const sortedForUi = sortSeasonPickRowsForUi<SeasonRowFull>(list);
+      const seasonsPayload = sortedForUi.map((s) => ({
+        id: s.id,
+        name: s.name,
+        status: s.status,
+      }));
       let seasonLabel = "Sin temporada";
       let seasonFormat: string | null = null;
       if (list.length > 0) {
-        const topId = pickTargetSeasonIdFromCandidates(list as SeasonPickRow[]);
-        const top = list.find((s) => s.id === topId) ?? list[0]!;
+        const top = list.find((s) => s.id === primarySeasonId) ?? list[0]!;
         seasonLabel = top.name;
         seasonFormat = top.format;
       }
@@ -270,6 +288,9 @@ export async function listOwnedLeaguesOrganizationCards(
         sportCode: L.sportCode,
         sportLabel: sportLabelFromCode(L.sportCode),
         seasonLabel,
+        timezone: L.timezone,
+        seasons: seasonsPayload,
+        primarySeasonId,
         seasonFormat,
         teamsTotal: teamCountByLeague.get(L.id) ?? 0,
         matchesPlayed: agg.played,

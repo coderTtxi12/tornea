@@ -78,6 +78,20 @@
       "when": 1778659107823,
       "tag": "0010_closed_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776086500000,
+      "tag": "0011_matches_sport_code_if_missing",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776086600000,
+      "tag": "0012_matches_football_columns_if_missing",
+      "breakpoints": true
     }
   ]
 }

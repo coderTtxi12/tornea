@@ -1,0 +1,773 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { newMatchJsonSchema } from "./new-match-form-schema";
+import type { MyLeaguesApiItem, MyLeaguesVenueRow } from "./my-leagues-state";
+
+type SeasonTeamRow = {
+  id: string;
+  name: string;
+  shortName: string | null;
+  leagueCategoryId: string | null;
+};
+
+type NewMatchFormProps = {
+  leagues: readonly MyLeaguesApiItem[];
+  venues: readonly MyLeaguesVenueRow[];
+  onClose: () => void;
+  onMatchCreated?: () => void;
+  onBusyChange?: (busy: boolean) => void;
+};
+
+const MATCH_ROUND_PRESET_CUSTOM = "__custom__";
+
+const MATCH_ROUND_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "", label: "Sin etiqueta" },
+  { value: "Fase regular / Liga", label: "Fase regular / Liga" },
+  { value: "Octavos de final", label: "Octavos de final" },
+  { value: "Cuartos de final", label: "Cuartos de final" },
+  { value: "Semifinal", label: "Semifinal" },
+  { value: "Final", label: "Final" },
+  { value: "Tercer lugar", label: "Tercer lugar" },
+  { value: MATCH_ROUND_PRESET_CUSTOM, label: "Otro (personalizado)" },
+];
+
+function defaultSeasonIdForLeague(L: MyLeaguesApiItem | null): string {
+  if (!L?.seasons.length) return "";
+  const ids = L.seasons.map((s) => s.id);
+  if (L.primarySeasonId && ids.includes(L.primarySeasonId)) {
+    return L.primarySeasonId;
+  }
+  return L.seasons[0]?.id ?? "";
+}
+
+function hour12To24(hour12: number, meridiem: "AM" | "PM"): number {
+  if (meridiem === "AM") {
+    return hour12 === 12 ? 0 : hour12;
+  }
+  return hour12 === 12 ? 12 : hour12 + 12;
+}
+
+/** Interpreta fecha + hora local (sin UTC) y devuelve ISO en UTC. */
+function localDatePartsToIso(
+  dateStr: string,
+  hour12: number,
+  minute: number,
+  meridiem: "AM" | "PM",
+): string | null {
+  if (!dateStr.trim()) return null;
+  const h24 = hour12To24(hour12, meridiem);
+  const d = new Date(
+    `${dateStr}T${String(h24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`,
+  );
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+export function NewMatchForm({
+  leagues,
+  venues,
+  onClose,
+  onMatchCreated,
+  onBusyChange,
+}: NewMatchFormProps) {
+  const [leagueId, setLeagueId] = useState(() => leagues[0]?.id ?? "");
+  const selectedLeague = useMemo(
+    () => leagues.find((l) => l.id === leagueId) ?? null,
+    [leagueId, leagues],
+  );
+
+  const [seasonId, setSeasonId] = useState(() => {
+    const L = leagues[0];
+    if (!L?.seasons.length) return "";
+    if (L.primarySeasonId && L.seasons.some((s) => s.id === L.primarySeasonId)) {
+      return L.primarySeasonId;
+    }
+    return L.seasons[0]?.id ?? "";
+  });
+
+  const [matchCategoryId, setMatchCategoryId] = useState("");
+  const [seasonTeams, setSeasonTeams] = useState<SeasonTeamRow[]>([]);
+  const [teamsLoad, setTeamsLoad] = useState<"idle" | "loading" | "error">("idle");
+  const [teamsError, setTeamsError] = useState<string | null>(null);
+
+  const [homeTeamId, setHomeTeamId] = useState("");
+  const [awayTeamId, setAwayTeamId] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledHour12, setScheduledHour12] = useState(7);
+  const [scheduledMinute, setScheduledMinute] = useState(0);
+  const [scheduledMeridiem, setScheduledMeridiem] = useState<"AM" | "PM">("PM");
+  const [venueId, setVenueId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [roundPreset, setRoundPreset] = useState("");
+  const [roundLabelCustom, setRoundLabelCustom] = useState("");
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(submitting);
+  }, [submitting, onBusyChange]);
+
+  useEffect(() => {
+    return () => {
+      onBusyChange?.(false);
+    };
+  }, [onBusyChange]);
+
+  useEffect(() => {
+    if (!leagueId || !seasonId) {
+      return undefined;
+    }
+    let cancelled = false;
+    void (async () => {
+      setTeamsLoad("loading");
+      setTeamsError(null);
+      try {
+        const res = await fetch(
+          `/api/leagues/${encodeURIComponent(leagueId)}/seasons/${encodeURIComponent(seasonId)}/teams`,
+        );
+        let data: { error?: string; teams?: SeasonTeamRow[] } = {};
+        try {
+          data = (await res.json()) as typeof data;
+        } catch {
+          /* ignore */
+        }
+        if (cancelled) return;
+        if (res.status === 401) {
+          window.location.href = "/";
+          return;
+        }
+        if (!res.ok) {
+          setTeamsLoad("error");
+          setTeamsError(
+            typeof data.error === "string" ? data.error : "No se pudieron cargar los equipos.",
+          );
+          setSeasonTeams([]);
+          return;
+        }
+        setSeasonTeams(Array.isArray(data.teams) ? data.teams : []);
+        setTeamsLoad("idle");
+      } catch {
+        if (!cancelled) {
+          setTeamsLoad("error");
+          setTeamsError("No se pudieron cargar los equipos.");
+          setSeasonTeams([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [leagueId, seasonId]);
+
+  function handleLeagueChange(nextLeagueId: string) {
+    setLeagueId(nextLeagueId);
+    const L = leagues.find((l) => l.id === nextLeagueId) ?? null;
+    setSeasonId(defaultSeasonIdForLeague(L));
+    setMatchCategoryId("");
+    setHomeTeamId("");
+    setAwayTeamId("");
+    setRoundPreset("");
+    setRoundLabelCustom("");
+    setSeasonTeams([]);
+    setTeamsLoad("idle");
+    setTeamsError(null);
+  }
+
+  const visibleTeams = useMemo(() => {
+    if (!matchCategoryId) return seasonTeams;
+    return seasonTeams.filter((t) => t.leagueCategoryId === matchCategoryId);
+  }, [seasonTeams, matchCategoryId]);
+
+  const leagueVenues = useMemo(
+    () => venues.filter((v) => v.leagueId === leagueId),
+    [venues, leagueId],
+  );
+
+  function resetForm() {
+    setMatchCategoryId("");
+    setHomeTeamId("");
+    setAwayTeamId("");
+    setScheduledDate("");
+    setScheduledHour12(7);
+    setScheduledMinute(0);
+    setScheduledMeridiem("PM");
+    setVenueId("");
+    setNotes("");
+    setRoundPreset("");
+    setRoundLabelCustom("");
+    setFieldErrors({});
+    setSubmitError(null);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFieldErrors({});
+    setSubmitError(null);
+
+    if (!scheduledDate.trim()) {
+      setFieldErrors({ scheduledAt: "Indica la fecha del partido." });
+      return;
+    }
+    const minuteNum = Number(scheduledMinute);
+    if (
+      !Number.isFinite(minuteNum) ||
+      !Number.isInteger(minuteNum) ||
+      minuteNum < 0 ||
+      minuteNum > 59
+    ) {
+      setFieldErrors({ scheduledAt: "Los minutos deben ser un entero entre 0 y 59." });
+      return;
+    }
+    const scheduledAtIso = localDatePartsToIso(
+      scheduledDate,
+      scheduledHour12,
+      minuteNum,
+      scheduledMeridiem,
+    );
+    if (!scheduledAtIso) {
+      setFieldErrors({ scheduledAt: "Fecha u hora no válida." });
+      return;
+    }
+
+    let roundLabel: string | null = null;
+    if (roundPreset === MATCH_ROUND_PRESET_CUSTOM) {
+      const t = roundLabelCustom.trim();
+      if (!t) {
+        setFieldErrors({ roundLabel: "Escribe la fase o el tipo de partido." });
+        return;
+      }
+      roundLabel = t;
+    } else if (roundPreset.trim()) {
+      roundLabel = roundPreset.trim();
+    }
+
+    const body = {
+      seasonId,
+      homeTeamId,
+      awayTeamId,
+      scheduledAt: scheduledAtIso,
+      roundLabel,
+      venueId: venueId.trim() ? venueId.trim() : null,
+      leagueCategoryId: matchCategoryId.trim() ? matchCategoryId.trim() : null,
+      notes: notes.trim() ? notes.trim() : null,
+    };
+
+    const parsed = newMatchJsonSchema.safeParse(body);
+    if (!parsed.success) {
+      const zErr: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0];
+        if (typeof key === "string" && zErr[key] === undefined) {
+          zErr[key] = issue.message;
+        }
+      }
+      setFieldErrors(zErr);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/matches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+
+      let data: { error?: string; fields?: Record<string, string> } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+
+      if (res.status === 401) {
+        window.location.href = "/";
+        return;
+      }
+
+      if (!res.ok) {
+        if (data.fields && typeof data.fields === "object") {
+          setFieldErrors(data.fields);
+        }
+        setSubmitError(
+          typeof data.error === "string"
+            ? data.error
+            : "No se pudo crear el partido. Intenta de nuevo.",
+        );
+        return;
+      }
+
+      onMatchCreated?.();
+      resetForm();
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const noSeasons = !selectedLeague?.seasons.length;
+  const canPickTeams = !noSeasons && teamsLoad !== "loading" && teamsLoad !== "error";
+
+  return (
+    <div className="w-full">
+      <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
+        El partido se guarda en <code className="text-foreground-muted text-xs">matches</code> con{" "}
+        <code className="text-foreground-muted text-xs">season_id</code>. Ambos equipos deben estar
+        dados de alta en la temporada en{" "}
+        <code className="text-foreground-muted text-xs">season_teams</code>. La hora se toma según
+        tu navegador y en la base también queda el{" "}
+        <code className="text-foreground-muted text-xs">timezone</code> de la liga (
+        {selectedLeague?.timezone ?? "—"}).
+      </p>
+
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        {submitError ? (
+          <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-2.5 text-sm">
+            {submitError}
+          </div>
+        ) : null}
+
+        {leagues.length > 1 ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">Liga</span>
+            <div className="relative mt-1">
+              <select
+                value={leagueId}
+                onChange={(e) => handleLeagueChange(e.target.value)}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2"
+              >
+                {leagues.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+          </label>
+        ) : null}
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Temporada</span>
+          <div className="relative mt-1">
+            <select
+              value={seasonId}
+              onChange={(e) => {
+                setSeasonId(e.target.value);
+                setHomeTeamId("");
+                setAwayTeamId("");
+                setSeasonTeams([]);
+                setTeamsLoad("loading");
+                setTeamsError(null);
+              }}
+              disabled={noSeasons}
+              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {noSeasons ? (
+                <option value="">Sin temporadas</option>
+              ) : (
+                selectedLeague!.seasons.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.status === "in_progress" ? " · en curso" : ""}
+                  </option>
+                ))
+              )}
+            </select>
+            <span
+              className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+              aria-hidden
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="opacity-70"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+          </div>
+          {noSeasons ? (
+            <span className="text-brand-purple mt-1 block text-xs">
+              No hay temporadas en esta liga. Registra un equipo para crear la primera.
+            </span>
+          ) : null}
+        </label>
+
+        {selectedLeague && selectedLeague.categories.length > 0 ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">
+              Categoría del partido (opcional)
+            </span>
+            <div className="relative mt-1">
+              <select
+                value={matchCategoryId}
+                onChange={(e) => {
+                  setMatchCategoryId(e.target.value);
+                  setHomeTeamId("");
+                  setAwayTeamId("");
+                }}
+                disabled={noSeasons}
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Sin categoría en el partido</option>
+                {selectedLeague.categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+            <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+              Si eliges categoría, solo verás equipos inscritos en esa categoría en la temporada; el
+              partido guarda <code className="text-foreground-muted">league_category_id</code>.
+            </span>
+          </label>
+        ) : null}
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Fase del torneo</span>
+          <div className="relative mt-1">
+            <select
+              value={roundPreset}
+              onChange={(e) => {
+                setRoundPreset(e.target.value);
+                if (e.target.value !== MATCH_ROUND_PRESET_CUSTOM) {
+                  setRoundLabelCustom("");
+                }
+              }}
+              disabled={noSeasons}
+              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-invalid={!!fieldErrors.roundLabel}
+            >
+              {MATCH_ROUND_OPTIONS.map((o) => (
+                <option key={o.value || "none"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span
+              className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+              aria-hidden
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="opacity-70"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+          </div>
+          {roundPreset === MATCH_ROUND_PRESET_CUSTOM ? (
+            <input
+              type="text"
+              value={roundLabelCustom}
+              onChange={(e) => setRoundLabelCustom(e.target.value)}
+              maxLength={120}
+              placeholder="Ej. Ida, vuelta, reclasificación…"
+              disabled={noSeasons}
+              className="border-border bg-surface-code/40 mt-2 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-invalid={!!fieldErrors.roundLabel}
+            />
+          ) : null}
+          {fieldErrors.roundLabel ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.roundLabel}</span>
+          ) : (
+            <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+              Se guarda en <code className="text-foreground-muted">matches.round_label</code> para
+              calendarios y tablas (no hay enum en base: puedes usar atajos o texto propio).
+            </span>
+          )}
+        </label>
+
+        {teamsLoad === "loading" ? (
+          <p className="text-foreground-muted text-sm">Cargando equipos de la temporada…</p>
+        ) : teamsLoad === "error" ? (
+          <p className="text-brand-purple text-sm">{teamsError}</p>
+        ) : canPickTeams && visibleTeams.length === 0 ? (
+          <p className="text-foreground-muted text-sm">
+            No hay equipos inscritos en esta temporada
+            {matchCategoryId ? " para la categoría elegida" : ""}.
+          </p>
+        ) : null}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block sm:col-span-1">
+            <span className="text-foreground-muted text-xs font-medium">Local</span>
+            <div className="relative mt-1">
+              <select
+                value={homeTeamId}
+                onChange={(e) => setHomeTeamId(e.target.value)}
+                disabled={!canPickTeams || visibleTeams.length < 2}
+                required
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-invalid={!!fieldErrors.homeTeamId}
+              >
+                <option value="">Elige un equipo</option>
+                {visibleTeams.map((t) => (
+                  <option key={t.id} value={t.id} disabled={t.id === awayTeamId}>
+                    {t.shortName?.trim() ? `${t.name} (${t.shortName})` : t.name}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+            {fieldErrors.homeTeamId ? (
+              <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.homeTeamId}</span>
+            ) : null}
+          </label>
+
+          <label className="block sm:col-span-1">
+            <span className="text-foreground-muted text-xs font-medium">Visitante</span>
+            <div className="relative mt-1">
+              <select
+                value={awayTeamId}
+                onChange={(e) => setAwayTeamId(e.target.value)}
+                disabled={!canPickTeams || visibleTeams.length < 2}
+                required
+                className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-invalid={!!fieldErrors.awayTeamId}
+              >
+                <option value="">Elige un equipo</option>
+                {visibleTeams.map((t) => (
+                  <option key={t.id} value={t.id} disabled={t.id === homeTeamId}>
+                    {t.shortName?.trim() ? `${t.name} (${t.shortName})` : t.name}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+                aria-hidden
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="opacity-70"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+            {fieldErrors.awayTeamId ? (
+              <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.awayTeamId}</span>
+            ) : null}
+          </label>
+        </div>
+
+        <div className="block">
+          <span className="text-foreground-muted text-xs font-medium">Fecha y hora</span>
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="block min-w-[10rem] flex-1">
+              <span className="text-foreground-subtle mb-1 block text-[10px] font-medium uppercase tracking-wide">
+                Fecha
+              </span>
+              <input
+                type="date"
+                name="scheduledDate"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                required
+                className="border-border bg-surface-code/40 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                aria-invalid={!!fieldErrors.scheduledAt}
+              />
+            </label>
+            <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+              <label className="block w-[4.5rem]">
+                <span className="text-foreground-subtle mb-1 block text-[10px] font-medium uppercase tracking-wide">
+                  Hora
+                </span>
+                <select
+                  value={scheduledHour12}
+                  onChange={(e) => setScheduledHour12(Number(e.target.value))}
+                  className="border-border bg-surface-code/40 w-full cursor-pointer appearance-none rounded-brand-md border px-2 py-2 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                  aria-invalid={!!fieldErrors.scheduledAt}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block w-[4rem]">
+                <span className="text-foreground-subtle mb-1 block text-[10px] font-medium uppercase tracking-wide">
+                  Min
+                </span>
+                <input
+                  type="number"
+                  name="scheduledMinute"
+                  min={0}
+                  max={59}
+                  step={1}
+                  value={scheduledMinute}
+                  onChange={(e) => setScheduledMinute(Number(e.target.value))}
+                  className="border-border bg-surface-code/40 w-full rounded-brand-md border px-2 py-2 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                  aria-invalid={!!fieldErrors.scheduledAt}
+                />
+              </label>
+              <label className="block w-[5.5rem]">
+                <span className="text-foreground-subtle mb-1 block text-[10px] font-medium uppercase tracking-wide">
+                  &nbsp;
+                </span>
+                <select
+                  value={scheduledMeridiem}
+                  onChange={(e) => setScheduledMeridiem(e.target.value as "AM" | "PM")}
+                  className="border-border bg-surface-code/40 w-full cursor-pointer appearance-none rounded-brand-md border px-2 py-2 pr-7 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                  aria-invalid={!!fieldErrors.scheduledAt}
+                >
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          {fieldErrors.scheduledAt ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.scheduledAt}</span>
+          ) : (
+            <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+              Hora en formato 12 h (AM / PM), interpretada en la zona horaria de tu dispositivo; al
+              guardar se usa también el timezone de la liga.
+            </span>
+          )}
+        </div>
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Cancha (opcional)</span>
+          <div className="relative mt-1">
+            <select
+              value={venueId}
+              onChange={(e) => setVenueId(e.target.value)}
+              className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2"
+            >
+              <option value="">—</option>
+              {leagueVenues.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+            <span
+              className="text-foreground-muted pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+              aria-hidden
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="opacity-70"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </span>
+          </div>
+          {fieldErrors.venueId ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.venueId}</span>
+          ) : null}
+        </label>
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Notas (opcional)</span>
+          <textarea
+            name="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            maxLength={2000}
+            className="border-border bg-surface-code/40 mt-1 w-full resize-y rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            aria-invalid={!!fieldErrors.notes}
+          />
+          {fieldErrors.notes ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.notes}</span>
+          ) : null}
+        </label>
+
+        <div className="border-border mt-2 flex flex-wrap gap-3 border-t pt-5">
+          <button
+            type="button"
+            className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+            onClick={() => {
+              resetForm();
+              onClose();
+            }}
+            disabled={submitting}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            disabled={submitting || noSeasons || teamsLoad === "loading" || visibleTeams.length < 2}
+          >
+            {submitting ? "Guardando…" : "Programar partido"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

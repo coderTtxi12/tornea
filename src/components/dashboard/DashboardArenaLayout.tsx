@@ -11,6 +11,7 @@ import {
   LeaguesMainLoading,
   NewLeagueCategoryForm,
   NewLeagueForm,
+  NewMatchForm,
   NewPlayerForm,
   NewTeamForm,
   NewVenueForm,
@@ -31,6 +32,8 @@ export type DashboardArenaLayoutProps = {
   signingOut: boolean;
   authConfigured: boolean;
   myLeagues: DashboardMyLeaguesState;
+  /** Al cambiar (p. ej. tras crear liga), el rail vuelve a pedir actividad/pendientes. */
+  railRefreshKey?: number;
   onLeagueCreated?: () => void;
   onLoadMorePlayers?: () => Promise<{
     ok: boolean;
@@ -50,7 +53,8 @@ type RightDrawerState =
   | { kind: "edit-team"; leagueId: string; teamId: string }
   | { kind: "register-player"; prefillTeamId?: string }
   | { kind: "edit-player"; leagueId: string; teamId: string; playerId: string }
-  | { kind: "player-sheet"; leagueId: string; teamId: string; playerId: string };
+  | { kind: "player-sheet"; leagueId: string; teamId: string; playerId: string }
+  | { kind: "new-match" };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -138,6 +142,7 @@ export function DashboardArenaLayout({
   signingOut,
   authConfigured,
   myLeagues,
+  railRefreshKey = 0,
   onLeagueCreated,
   onLoadMorePlayers,
   playersLoadingMore,
@@ -149,6 +154,7 @@ export function DashboardArenaLayout({
   const [venueFormKey, setVenueFormKey] = useState(0);
   const [teamFormKey, setTeamFormKey] = useState(0);
   const [playerFormKey, setPlayerFormKey] = useState(0);
+  const [matchFormKey, setMatchFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
   const [drawerBusy, setDrawerBusy] = useState(false);
 
@@ -204,6 +210,11 @@ export function DashboardArenaLayout({
     },
     [],
   );
+
+  const openNewMatchDrawer = useCallback(() => {
+    setMatchFormKey((k) => k + 1);
+    setDrawer({ kind: "new-match" });
+  }, []);
 
   const closeDrawer = useCallback(() => {
     setDrawer({ kind: "closed" });
@@ -321,12 +332,14 @@ export function DashboardArenaLayout({
                   onOpenEditTeamDrawer={openEditTeamDrawer}
                   onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
                   onOpenPlayerSheetDrawer={openPlayerSheetDrawer}
+                  onOpenNewMatchDrawer={openNewMatchDrawer}
+                  fixtureDataRefreshKey={railRefreshKey}
                 />
               )}
             </div>
           </main>
 
-          {hasLeagues ? <DashboardRightRail /> : null}
+          {hasLeagues ? <DashboardRightRail refreshKey={railRefreshKey} /> : null}
         </div>
       </div>
 
@@ -340,7 +353,9 @@ export function DashboardArenaLayout({
               ? "Nueva liga"
               : drawer.kind === "new-category"
                 ? "Nueva categoría"
-                : drawer.kind === "edit-team"
+                : drawer.kind === "new-match"
+                  ? "Nuevo partido"
+                  : drawer.kind === "edit-team"
                   ? "Editar equipo"
                   : drawer.kind === "register-player"
                     ? "Agregar jugador"
@@ -359,7 +374,9 @@ export function DashboardArenaLayout({
               ? "Completá los datos; el escudo es opcional. Se usa Idempotency-Key para evitar duplicados si la red falla."
               : drawer.kind === "new-category"
                 ? "La categoría queda en league_categories y se ordena al final (sort_order)."
-                : drawer.kind === "edit-team"
+                : drawer.kind === "new-match"
+                  ? "Alta en matches: temporada, equipos inscritos (season_teams), fecha/hora y cancha opcional."
+                  : drawer.kind === "edit-team"
                   ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
                   : drawer.kind === "register-player"
                     ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
@@ -394,6 +411,15 @@ export function DashboardArenaLayout({
               onClose={closeDrawer}
               onBusyChange={setDrawerBusy}
               onCategoryCreated={onLeagueCreated}
+            />
+          ) : drawer.kind === "new-match" && myLeagues.status === "ready" ? (
+            <NewMatchForm
+              key={matchFormKey}
+              leagues={myLeagues.items}
+              venues={myLeagues.venues}
+              onClose={closeDrawer}
+              onBusyChange={setDrawerBusy}
+              onMatchCreated={onLeagueCreated}
             />
           ) : drawer.kind === "player-sheet" ? (
             <PlayerTechnicalSheetPanel

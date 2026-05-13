@@ -182,6 +182,7 @@ export default function DashboardPage() {
       signingOut={signingOut}
       authConfigured={configured}
       myLeagues={myLeagues}
+      railRefreshKey={refetchKey}
       onLeagueCreated={() => setRefetchKey((k) => k + 1)}
       onLoadMorePlayers={handleLoadMorePlayers}
       playersLoadingMore={playersLoadingMore}

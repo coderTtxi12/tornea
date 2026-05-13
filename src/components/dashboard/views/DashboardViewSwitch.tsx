@@ -38,6 +38,8 @@ export function DashboardViewSwitch({
   onOpenEditTeamDrawer,
   onOpenRegisterPlayerDrawer,
   onOpenPlayerSheetDrawer,
+  onOpenNewMatchDrawer,
+  fixtureDataRefreshKey = 0,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
@@ -63,6 +65,8 @@ export function DashboardViewSwitch({
     teamId: string;
     playerId: string;
   }) => void;
+  onOpenNewMatchDrawer: () => void;
+  fixtureDataRefreshKey?: number;
 }) {
   switch (nav) {
     case "home":
@@ -76,7 +80,13 @@ export function DashboardViewSwitch({
         />
       );
     case "fixture":
-      return <DashboardFixtureView />;
+      return (
+        <DashboardFixtureView
+          hasManagedLeagues={leagueOrgCards.length > 0}
+          fixtureDataRefreshKey={fixtureDataRefreshKey}
+          onOpenNewMatchDrawer={onOpenNewMatchDrawer}
+        />
+      );
     case "live":
       return <DashboardLiveView />;
     case "teams":

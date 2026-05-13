@@ -28,6 +28,23 @@ if (!process.env.DATABASE_URL?.trim()) {
   process.exit(1);
 }
 
+function describeDatabaseTarget(urlRaw) {
+  try {
+    const normalized = urlRaw.replace(/^postgres(ql)?:/i, "postgresql:");
+    const u = new URL(normalized);
+    const db = (u.pathname || "").replace(/^\//, "") || "(default)";
+    const host = u.hostname || "?";
+    const port = u.port || "5432";
+    return `${host}:${port}/${db}`;
+  } catch {
+    return "(no se pudo interpretar DATABASE_URL)";
+  }
+}
+
+console.info(
+  `[db:migrate] Objetivo: ${describeDatabaseTarget(process.env.DATABASE_URL.trim())} ` +
+    "(debe coincidir con la misma URL que usa `next dev` / producción).",
+);
 console.info("[db:migrate] Applying Drizzle migrations…");
 
 execSync("npx drizzle-kit migrate", {

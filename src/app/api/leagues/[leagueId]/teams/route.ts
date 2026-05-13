@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/leagues/new-team-form-schema";
 import { getDb } from "@/db/client";
 import { teams } from "@/db/schema";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { createTeamInLeague, type TeamRegistrationContacts } from "@/logic/leagues/create-team-in-league";
 import {
@@ -173,6 +174,26 @@ export async function POST(
         );
       }
     }
+
+    const crestUploaded =
+      crestEntry instanceof File && crestEntry.size > 0;
+    await recordAppAuditLog(
+      {
+        actorUserId: appUser.id,
+        action: "create",
+        entityType: AppAuditEntityType.team,
+        entityId: created.teamId,
+        leagueId,
+        summary: `Equipo registrado: ${d.teamName.trim()}`,
+        metadata: {
+          seasonId: created.seasonId,
+          seasonTeamId: created.seasonTeamId,
+          leagueCategoryId: d.leagueCategoryId,
+          crestUploaded,
+        },
+      },
+      { swallowErrors: true },
+    );
 
     return NextResponse.json(
       {

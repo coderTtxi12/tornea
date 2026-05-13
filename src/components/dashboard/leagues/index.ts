@@ -1,6 +1,7 @@
 export type {
   DashboardMyLeaguesState,
   MyLeaguesApiItem,
+  MyLeaguesMatchRow,
   MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
 } from "./my-leagues-state";
@@ -12,6 +13,7 @@ export { NewLeagueCategoryForm } from "./NewLeagueCategoryForm";
 export { NewTeamForm } from "./NewTeamForm";
 export { NewPlayerForm } from "./NewPlayerForm";
 export { NewVenueForm } from "./NewVenueForm";
+export { NewMatchForm } from "./NewMatchForm";
 export { PlayerTechnicalSheetPanel } from "./PlayerTechnicalSheetPanel";
 export {
   LEAGUE_SHIELD_MAX_FILE_BYTES,

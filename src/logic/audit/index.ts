@@ -1,5 +1,7 @@
 export {
   listRecentAppAuditLogsForLeague,
+  listRecentAppAuditLogsForLeagues,
+  type AppAuditFeedRowWithLeague,
 } from "./list-recent-app-audit-logs";
 export {
   recordAppAuditLog,

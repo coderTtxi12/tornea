@@ -31,11 +31,16 @@ function dateSortKey(d: Date | string | null): number {
  */
 export function pickTargetSeasonIdFromCandidates(rows: SeasonPickRow[]): string | null {
   if (rows.length === 0) return null;
-  const sorted = [...rows].sort((a, b) => {
+  const sorted = sortSeasonPickRowsForUi(rows);
+  return sorted[0]?.id ?? null;
+}
+
+/** Misma prioridad que la temporada “activa” — útil para listas en UI. */
+export function sortSeasonPickRowsForUi<T extends SeasonPickRow>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
     const pa = seasonPickPriority(a.status);
     const pb = seasonPickPriority(b.status);
     if (pa !== pb) return pa - pb;
     return dateSortKey(b.startsOn) - dateSortKey(a.startsOn);
   });
-  return sorted[0]?.id ?? null;
 }
