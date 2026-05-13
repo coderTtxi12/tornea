@@ -9,7 +9,9 @@ import {
   newTeamFormFieldsSchema,
   teamStatusEnumSchema,
 } from "@/components/dashboard/leagues/new-team-form-schema";
+import { getDb } from "@/db/client";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { getTeamForOwnerEdit } from "@/logic/leagues/get-team-for-owner-edit";
 import { resolveSupabaseStorageUrlForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
 import {
@@ -196,10 +198,14 @@ export async function PATCH(
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
       const storageClient = service ?? supabase;
+      const storageOwner = await getLeagueOwnerUserId(getDb(), leagueId);
+      if (!storageOwner) {
+        return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });
+      }
       try {
         await uploadTeamCrestAndSetUrl(storageClient, {
           bucket,
-          ownerUserId: appUser.id,
+          ownerUserId: storageOwner,
           leagueId,
           teamId,
           bytes,

@@ -41,6 +41,19 @@ export type MyLeaguesTeamRow = {
   crestUrl: string | null;
 };
 
+/** Fila de sedes / canchas (datos reales desde GET /api/leagues/my). */
+export type MyLeaguesVenueRow = {
+  id: string;
+  leagueId: string;
+  leagueName: string;
+  name: string;
+  address: string | null;
+  surface: string | null;
+  badgeLabel: string;
+  photoCount: number;
+  hasAvailabilityNotes: boolean;
+};
+
 /** Fila de plantilla / jugador (datos reales desde GET /api/leagues/my). */
 export type MyLeaguesPlayerRow = {
   id: string;
@@ -67,6 +80,7 @@ export type DashboardMyLeaguesState =
       items: readonly MyLeaguesApiItem[];
       teams: readonly MyLeaguesTeamRow[];
       players: readonly MyLeaguesPlayerRow[];
+      venues: readonly MyLeaguesVenueRow[];
       /** Paginación servidor (máx. 50 filas por carga); `null` si no hay más. */
       playersNextCursor: string | null;
     };

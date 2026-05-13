@@ -11,7 +11,9 @@ import {
   newPlayerFormFieldsSchema,
   parseOptionalShirtNumber,
 } from "@/components/dashboard/leagues/new-player-form-schema";
+import { getDb } from "@/db/client";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { mergePlayerMetadata } from "@/logic/players/create-player-in-team";
 import { getPlayerForOwnerEdit } from "@/logic/players/get-player-for-owner-edit";
 import { tryRemovePlayerFiles, uploadPlayerFile } from "@/logic/players/upload-player-files";
@@ -209,6 +211,10 @@ export async function PATCH(
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
       const storageClient = service ?? supabase;
+      const storageOwner = await getLeagueOwnerUserId(getDb(), leagueId);
+      if (!storageOwner) {
+        return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });
+      }
       const uploadedPaths: string[] = [];
       const metadataPatch: Record<string, unknown> = {};
 
@@ -217,7 +223,7 @@ export async function PATCH(
           const bytes = new Uint8Array(await item.file.arrayBuffer());
           const ref = await uploadPlayerFile(storageClient, {
             bucket,
-            ownerUserId: appUser.id,
+            ownerUserId: storageOwner,
             playerId,
             kind: item.kind,
             bytes,

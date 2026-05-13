@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { leagues, players, seasons, teamRosters, teams } from "@/db/schema";
 
+import { userCanManageLeague } from "@/logic/leagues/league-dashboard-admin";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "@/logic/leagues/season-pick";
 
 export type PlayerEditPayload = {
@@ -31,12 +32,15 @@ export async function getPlayerForOwnerEdit(
 ): Promise<PlayerEditPayload | "FORBIDDEN" | "NOT_FOUND"> {
   const db = getDb();
 
-  const [league] = await db
+  const [leagueRow] = await db
     .select({ id: leagues.id })
     .from(leagues)
-    .where(and(eq(leagues.id, leagueId), eq(leagues.ownerUserId, ownerUserId)))
+    .where(eq(leagues.id, leagueId))
     .limit(1);
-  if (!league) {
+  if (!leagueRow) {
+    return "NOT_FOUND";
+  }
+  if (!(await userCanManageLeague(db, leagueId, ownerUserId))) {
     return "FORBIDDEN";
   }
 

@@ -149,7 +149,7 @@ export function DashboardLeaguesView({
     <>
       <DashboardViewHeader
         title="Ligas y organizaciones"
-        hint="Datos de tus ligas (`leagues`): equipos (`teams`) y partidos por temporada (`matches` vía `seasons`). Solo ves ligas donde eres dueño (`owner_user_id`)."
+        hint="Datos de tus ligas (`leagues`): equipos (`teams`) y partidos por temporada (`matches` vía `seasons`). Ves las ligas que gestionás como propietario o administrador del panel."
         actions={
           <>
             <button

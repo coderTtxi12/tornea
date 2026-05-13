@@ -13,6 +13,7 @@ import {
   NewLeagueForm,
   NewPlayerForm,
   NewTeamForm,
+  NewVenueForm,
   PlayerTechnicalSheetPanel,
   type DashboardMyLeaguesState,
 } from "./leagues";
@@ -43,6 +44,8 @@ type RightDrawerState =
   | { kind: "closed" }
   | { kind: "new-league" }
   | { kind: "new-category"; leagueId: string; leagueName: string }
+  | { kind: "new-venue" }
+  | { kind: "edit-venue"; leagueId: string; venueId: string }
   | { kind: "register-team" }
   | { kind: "edit-team"; leagueId: string; teamId: string }
   | { kind: "register-player"; prefillTeamId?: string }
@@ -143,6 +146,7 @@ export function DashboardArenaLayout({
   const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
   const [leagueFormKey, setLeagueFormKey] = useState(0);
   const [categoryFormKey, setCategoryFormKey] = useState(0);
+  const [venueFormKey, setVenueFormKey] = useState(0);
   const [teamFormKey, setTeamFormKey] = useState(0);
   const [playerFormKey, setPlayerFormKey] = useState(0);
   const searchShortcutOs = useSearchShortcutOs();
@@ -159,6 +163,16 @@ export function DashboardArenaLayout({
   const openNewCategoryDrawer = useCallback((args: { leagueId: string; leagueName: string }) => {
     setCategoryFormKey((k) => k + 1);
     setDrawer({ kind: "new-category", ...args });
+  }, []);
+
+  const openNewVenueDrawer = useCallback(() => {
+    setVenueFormKey((k) => k + 1);
+    setDrawer({ kind: "new-venue" });
+  }, []);
+
+  const openEditVenueDrawer = useCallback((args: { leagueId: string; venueId: string }) => {
+    setVenueFormKey((k) => k + 1);
+    setDrawer({ kind: "edit-venue", ...args });
   }, []);
 
   const openRegisterTeamDrawer = useCallback(() => {
@@ -300,6 +314,9 @@ export function DashboardArenaLayout({
                   playersLoadingMore={playersLoadingMore}
                   onOpenNewLeagueDrawer={openNewLeagueDrawer}
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
+                  onOpenNewVenueDrawer={openNewVenueDrawer}
+                  onOpenEditVenueDrawer={openEditVenueDrawer}
+                  venueRows={myLeagues.status === "ready" ? myLeagues.venues : []}
                   onOpenRegisterTeamDrawer={openRegisterTeamDrawer}
                   onOpenEditTeamDrawer={openEditTeamDrawer}
                   onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
@@ -331,7 +348,11 @@ export function DashboardArenaLayout({
                       ? "Editar jugador"
                       : drawer.kind === "player-sheet"
                         ? "Ficha técnica"
-                        : "Registrar equipo"
+                        : drawer.kind === "new-venue"
+                          ? "Nueva cancha"
+                          : drawer.kind === "edit-venue"
+                            ? "Editar cancha"
+                            : "Registrar equipo"
           }
           description={
             drawer.kind === "new-league"
@@ -346,7 +367,11 @@ export function DashboardArenaLayout({
                       ? "Nombre, nacimiento, dorsal, posición y WhatsApp. Nueva foto o CURP opcional."
                       : drawer.kind === "player-sheet"
                         ? "Perfil visual con estadísticas acumuladas en esta liga (todas las temporadas con partidos registrados)."
-                        : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
+                        : drawer.kind === "new-venue"
+                          ? "Nombre, dirección y superficie obligatorios. Fotos y disponibilidad opcionales; se guardan en venues (metadata) y Storage."
+                          : drawer.kind === "edit-venue"
+                            ? "Actualizá datos y superficie; podés sumar fotos o quitar todas. La liga no se cambia desde acá."
+                            : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
           }
           onClose={closeDrawer}
         >
@@ -386,6 +411,24 @@ export function DashboardArenaLayout({
                   playerId: drawer.playerId,
                 });
               }}
+            />
+          ) : (drawer.kind === "new-venue" || drawer.kind === "edit-venue") &&
+            myLeagues.status === "ready" ? (
+            <NewVenueForm
+              key={
+                drawer.kind === "edit-venue"
+                  ? `edit-venue-${drawer.leagueId}-${drawer.venueId}-${venueFormKey}`
+                  : `new-venue-${venueFormKey}`
+              }
+              leagues={myLeagues.items}
+              editTarget={
+                drawer.kind === "edit-venue"
+                  ? { leagueId: drawer.leagueId, venueId: drawer.venueId }
+                  : null
+              }
+              onClose={closeDrawer}
+              onBusyChange={setDrawerBusy}
+              onVenueCreated={onLeagueCreated}
             />
           ) : myLeagues.status === "ready" &&
             (drawer.kind === "register-team" || drawer.kind === "edit-team") ? (

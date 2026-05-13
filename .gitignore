@@ -44,3 +44,4 @@ next-env.d.ts
 # Local docs (branding, commit conventions — keep private / machine-local)
 /docs/BRANDING.md
 /docs/COMMIT_FORMAT.md
+/docs/AUDIT_LOGS.md

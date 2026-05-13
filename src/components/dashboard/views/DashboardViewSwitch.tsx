@@ -6,6 +6,7 @@ import type {
   MyLeaguesApiItem,
   MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
+  MyLeaguesVenueRow,
 } from "../leagues/my-leagues-state";
 
 import { DashboardDisciplineView } from "./DashboardDisciplineView";
@@ -30,6 +31,9 @@ export function DashboardViewSwitch({
   playersLoadingMore,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
+  onOpenNewVenueDrawer,
+  onOpenEditVenueDrawer,
+  venueRows,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
   onOpenRegisterPlayerDrawer,
@@ -48,6 +52,9 @@ export function DashboardViewSwitch({
   playersLoadingMore?: boolean;
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
+  onOpenNewVenueDrawer: () => void;
+  onOpenEditVenueDrawer: (args: { leagueId: string; venueId: string }) => void;
+  venueRows: readonly MyLeaguesVenueRow[];
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
   onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
@@ -93,7 +100,14 @@ export function DashboardViewSwitch({
         />
       );
     case "venues":
-      return <DashboardVenuesView />;
+      return (
+        <DashboardVenuesView
+          venueRows={venueRows}
+          leagueOrgCards={leagueOrgCards}
+          onOpenNewVenueDrawer={onOpenNewVenueDrawer}
+          onOpenEditVenueDrawer={onOpenEditVenueDrawer}
+        />
+      );
     case "standings":
       return <DashboardStandingsView />;
     case "discipline":
@@ -101,7 +115,7 @@ export function DashboardViewSwitch({
     case "reports":
       return <DashboardReportsView />;
     case "settings":
-      return <DashboardSettingsView />;
+      return <DashboardSettingsView leagueOrgCards={leagueOrgCards} />;
     default:
       return <DashboardHomeView />;
   }

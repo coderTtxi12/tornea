@@ -9,6 +9,7 @@ import type {
   MyLeaguesApiItem,
   MyLeaguesPlayerRow,
   MyLeaguesTeamRow,
+  MyLeaguesVenueRow,
 } from "@/components/dashboard/leagues/my-leagues-state";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
@@ -21,6 +22,7 @@ type LeaguesMyApiResponse = {
   leagues: MyLeaguesApiItem[];
   teams?: MyLeaguesTeamRow[];
   players?: MyLeaguesPlayerRow[];
+  venues?: MyLeaguesVenueRow[];
   playersNextCursor?: string | null;
 };
 
@@ -77,6 +79,7 @@ export default function DashboardPage() {
           items: data.leagues ?? [],
           teams: data.teams ?? [],
           players: data.players ?? [],
+          venues: data.venues ?? [],
           playersNextCursor: data.playersNextCursor ?? null,
         });
       } catch {

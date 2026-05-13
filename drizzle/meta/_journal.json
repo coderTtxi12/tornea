@@ -64,6 +64,20 @@
       "when": 1778581146889,
       "tag": "0008_unusual_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778658953764,
+      "tag": "0009_eminent_praxagora",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778659107823,
+      "tag": "0010_closed_hairball",
+      "breakpoints": true
     }
   ]
 }

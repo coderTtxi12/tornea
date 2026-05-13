@@ -12,6 +12,7 @@ import {
   teams,
 } from "@/db/schema";
 
+import { userCanManageLeague } from "./league-dashboard-admin";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "./season-pick";
 
 export type DbTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -86,7 +87,7 @@ export async function ensureTargetSeasonIdForLeagueTx(
 }
 
 /**
- * Crea `teams` + `season_teams` (categoría + contactos en metadata). Solo el dueño de la liga.
+ * Crea `teams` + `season_teams` (categoría + contactos en metadata). Dueño o admin del panel.
  */
 export async function createTeamInLeague(args: {
   ownerUserId: string;
@@ -94,19 +95,27 @@ export async function createTeamInLeague(args: {
   leagueCategoryId: string;
   teamName: string;
   contacts: TeamRegistrationContacts;
-}): Promise<{ teamId: string; seasonId: string; seasonTeamId: string }> {
+}): Promise<{
+  teamId: string;
+  seasonId: string;
+  seasonTeamId: string;
+  leagueOwnerUserId: string;
+}> {
   const db = getDb();
   const teamNameTrim = args.teamName.trim();
 
   try {
     return await db.transaction(async (tx) => {
-      const owner = await tx
-        .select({ id: leagues.id })
+      const [leagueRow] = await tx
+        .select({ id: leagues.id, ownerUserId: leagues.ownerUserId })
         .from(leagues)
-        .where(and(eq(leagues.id, args.leagueId), eq(leagues.ownerUserId, args.ownerUserId)))
+        .where(eq(leagues.id, args.leagueId))
         .limit(1);
 
-      if (!owner[0]) {
+      if (!leagueRow) {
+        throw new Error("NOT_FOUND");
+      }
+      if (!(await userCanManageLeague(tx, args.leagueId, args.ownerUserId))) {
         throw new Error("FORBIDDEN");
       }
 
@@ -159,9 +168,15 @@ export async function createTeamInLeague(args: {
         throw new Error("No se pudo inscribir el equipo en la temporada.");
       }
 
-      return { teamId: team.id, seasonId, seasonTeamId: st.id };
+      return {
+        teamId: team.id,
+        seasonId,
+        seasonTeamId: st.id,
+        leagueOwnerUserId: leagueRow.ownerUserId,
+      };
     });
   } catch (e) {
+    if (e instanceof Error && e.message === "NOT_FOUND") throw e;
     if (e instanceof Error && e.message === "FORBIDDEN") throw e;
     if (e instanceof Error && e.message === "BAD_CATEGORY") throw e;
     if (isPostgresUniqueViolation(e)) {

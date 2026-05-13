@@ -11,6 +11,7 @@ import {
   newPlayerFormFieldsSchema,
   parseOptionalShirtNumber,
 } from "@/components/dashboard/leagues/new-player-form-schema";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import {
   createPlayerInTeam,
@@ -102,7 +103,12 @@ export async function POST(
       data.whatsappPhoneNational,
     );
 
-    let created: { playerId: string; seasonId: string; teamRosterId: string };
+    let created: {
+      playerId: string;
+      seasonId: string;
+      teamRosterId: string;
+      leagueOwnerUserId: string;
+    };
     try {
       created = await createPlayerInTeam({
         ownerUserId: appUser.id,
@@ -115,6 +121,9 @@ export async function POST(
         whatsappE164,
       });
     } catch (e) {
+      if (e instanceof Error && e.message === "NOT_FOUND") {
+        return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });
+      }
       if (e instanceof Error && e.message === "FORBIDDEN") {
         return NextResponse.json(
           { error: "No tenés permiso para esta liga." },
@@ -201,7 +210,7 @@ export async function POST(
           const bytes = new Uint8Array(await item.file.arrayBuffer());
           const ref = await uploadPlayerFile(storageClient, {
             bucket,
-            ownerUserId: appUser.id,
+            ownerUserId: created.leagueOwnerUserId,
             playerId: created.playerId,
             kind: item.kind,
             bytes,
@@ -228,6 +237,23 @@ export async function POST(
         );
       }
     }
+
+    await recordAppAuditLog(
+      {
+        actorUserId: appUser.id,
+        action: "create",
+        entityType: AppAuditEntityType.player,
+        entityId: created.playerId,
+        leagueId,
+        summary: `Jugador agregado: ${data.fullName}`,
+        metadata: {
+          teamId,
+          teamRosterId: created.teamRosterId,
+          seasonId: created.seasonId,
+        },
+      },
+      { swallowErrors: true },
+    );
 
     return NextResponse.json(
       { player: { id: created.playerId } },

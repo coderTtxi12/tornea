@@ -89,7 +89,12 @@ export async function POST(
       },
     };
 
-    let created: { teamId: string; seasonId: string; seasonTeamId: string };
+    let created: {
+      teamId: string;
+      seasonId: string;
+      seasonTeamId: string;
+      leagueOwnerUserId: string;
+    };
     try {
       created = await createTeamInLeague({
         ownerUserId: appUser.id,
@@ -99,6 +104,9 @@ export async function POST(
         contacts,
       });
     } catch (e) {
+      if (e instanceof Error && e.message === "NOT_FOUND") {
+        return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });
+      }
       if (e instanceof Error && e.message === "FORBIDDEN") {
         return NextResponse.json({ error: "No tenés permiso para esta liga." }, { status: 403 });
       }
@@ -146,7 +154,7 @@ export async function POST(
       try {
         await uploadTeamCrestAndSetUrl(storageClient, {
           bucket,
-          ownerUserId: appUser.id,
+          ownerUserId: created.leagueOwnerUserId,
           leagueId,
           teamId: created.teamId,
           bytes,

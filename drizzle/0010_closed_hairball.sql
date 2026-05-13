@@ -1,0 +1,1 @@
+ALTER TABLE "venues" ADD COLUMN "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL;

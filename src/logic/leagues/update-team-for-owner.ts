@@ -10,6 +10,7 @@ import {
 
 import type { TeamRegistrationContacts } from "./create-team-in-league";
 import { ensureTargetSeasonIdForLeagueTx } from "./create-team-in-league";
+import { userCanManageLeague } from "./league-dashboard-admin";
 
 function deriveShortName(teamName: string): string {
   const words = teamName
@@ -48,7 +49,7 @@ function mergeSeasonTeamMetadata(
 }
 
 /**
- * Actualiza `teams` + inscripción en temporada objetivo (`season_teams`). Solo el dueño.
+ * Actualiza `teams` + inscripción en temporada objetivo (`season_teams`). Dueño o admin.
  */
 export async function updateTeamForOwner(args: {
   ownerUserId: string;
@@ -64,13 +65,16 @@ export async function updateTeamForOwner(args: {
 
   try {
     await db.transaction(async (tx) => {
-      const owner = await tx
+      const [leagueRow] = await tx
         .select({ id: leagues.id })
         .from(leagues)
-        .where(and(eq(leagues.id, args.leagueId), eq(leagues.ownerUserId, args.ownerUserId)))
+        .where(eq(leagues.id, args.leagueId))
         .limit(1);
 
-      if (!owner[0]) {
+      if (!leagueRow) {
+        throw new Error("NOT_FOUND");
+      }
+      if (!(await userCanManageLeague(tx, args.leagueId, args.ownerUserId))) {
         throw new Error("FORBIDDEN");
       }
 

@@ -9,6 +9,7 @@ import {
   teams,
 } from "@/db/schema";
 import { ensureTargetSeasonIdForLeagueTx } from "@/logic/leagues/create-team-in-league";
+import { userCanManageLeague } from "@/logic/leagues/league-dashboard-admin";
 
 export type NewPlayerInsert = {
   ownerUserId: string;
@@ -33,20 +34,25 @@ export type CreatedPlayer = {
 
 /**
  * Crea `players` + `team_rosters` (categoría a través de la inscripción del equipo en la
- * temporada objetivo). Solo el dueño de la liga puede crear jugadores. Si el equipo no
+ * temporada objetivo). Dueño o administrador del panel. Si el equipo no
  * tiene inscripción `season_teams` en la temporada objetivo, se crea automáticamente sin
  * categoría — la app validará después que coincida con la del equipo.
  */
-export async function createPlayerInTeam(args: NewPlayerInsert): Promise<CreatedPlayer> {
+export async function createPlayerInTeam(
+  args: NewPlayerInsert,
+): Promise<CreatedPlayer & { leagueOwnerUserId: string }> {
   const db = getDb();
 
   return db.transaction(async (tx) => {
-    const owner = await tx
-      .select({ id: leagues.id })
+    const [leagueRow] = await tx
+      .select({ id: leagues.id, ownerUserId: leagues.ownerUserId })
       .from(leagues)
-      .where(and(eq(leagues.id, args.leagueId), eq(leagues.ownerUserId, args.ownerUserId)))
+      .where(eq(leagues.id, args.leagueId))
       .limit(1);
-    if (!owner[0]) {
+    if (!leagueRow) {
+      throw new Error("NOT_FOUND");
+    }
+    if (!(await userCanManageLeague(tx, args.leagueId, args.ownerUserId))) {
       throw new Error("FORBIDDEN");
     }
 
@@ -110,7 +116,12 @@ export async function createPlayerInTeam(args: NewPlayerInsert): Promise<Created
       throw new Error("No se pudo registrar al jugador en la plantilla.");
     }
 
-    return { playerId: created.id, seasonId, teamRosterId: roster.id };
+    return {
+      playerId: created.id,
+      seasonId,
+      teamRosterId: roster.id,
+      leagueOwnerUserId: leagueRow.ownerUserId,
+    };
   });
 }
 

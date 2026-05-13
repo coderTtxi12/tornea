@@ -147,6 +147,16 @@ export const footballFoulKindEnum = pgEnum("football_foul_kind", [
   "other",
 ]);
 
+/**
+ * Acciones de auditoría desde la app web (y futuros clientes).
+ * `create` = alta / guardar registro nuevo; `update` = edición; `delete` = baja.
+ */
+export const appAuditActionEnum = pgEnum("app_audit_action", [
+  "create",
+  "update",
+  "delete",
+]);
+
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -361,6 +371,8 @@ export const venues = pgTable(
     name: text("name").notNull(),
     address: text("address"),
     notes: text("notes"),
+    /** Superficie, fotos, disponibilidad: convención en `docs/DATABASE.md` (`venues`). */
+    metadata: jsonb("metadata").notNull().default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -1068,6 +1080,46 @@ export const prizeDraws = pgTable(
   (t) => [index("prize_draws_season_id_idx").on(t.seasonId)],
 );
 
+/**
+ * Bitácora append-only de acciones en la app web (dashboard).
+ * Incluye actor, rol en liga (si aplica) y contexto para “Actividad reciente”.
+ */
+export const appAuditLogs = pgTable(
+  "app_audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Copia al momento del evento (si el usuario se borra o cambia nombre). */
+    actorDisplayNameSnapshot: text("actor_display_name_snapshot"),
+    actorEmailSnapshot: text("actor_email_snapshot"),
+    /** Rol del actor en `league_id` al momento del evento (`league_members.role` o dueño implícito). */
+    actorLeagueRole: leagueMemberRoleEnum("actor_league_role"),
+    leagueId: uuid("league_id").references(() => leagues.id, {
+      onDelete: "set null",
+    }),
+    action: appAuditActionEnum("action").notNull(),
+    /** Recurso lógico: p. ej. `player`, `team`, `league`, `league_category`, `match`. */
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    /** Texto corto para listas / feed (UI puede i18n aparte). */
+    summary: text("summary").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("app_audit_logs_league_id_created_at_idx").on(t.leagueId, t.createdAt),
+    index("app_audit_logs_actor_user_id_created_at_idx").on(
+      t.actorUserId,
+      t.createdAt,
+    ),
+    index("app_audit_logs_entity_type_entity_id_idx").on(t.entityType, t.entityId),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Relations (optional; use with drizzle-orm relational queries)
 // ---------------------------------------------------------------------------
@@ -1076,6 +1128,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   ownedLeagues: many(leagues),
   leagueMemberships: many(leagueMembers),
   dashboardAccessRequests: many(dashboardAccessRequests),
+  auditLogsAsActor: many(appAuditLogs),
 }));
 
 export const dashboardAccessRequestsRelations = relations(
@@ -1097,6 +1150,18 @@ export const leaguesRelations = relations(leagues, ({ one, many }) => ({
   venues: many(venues),
   seasons: many(seasons),
   teams: many(teams),
+  auditLogs: many(appAuditLogs),
+}));
+
+export const appAuditLogsRelations = relations(appAuditLogs, ({ one }) => ({
+  actor: one(users, {
+    fields: [appAuditLogs.actorUserId],
+    references: [users.id],
+  }),
+  league: one(leagues, {
+    fields: [appAuditLogs.leagueId],
+    references: [leagues.id],
+  }),
 }));
 
 export const leagueMembersRelations = relations(leagueMembers, ({ one }) => ({

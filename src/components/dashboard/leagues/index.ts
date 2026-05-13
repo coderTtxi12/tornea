@@ -11,6 +11,7 @@ export { NewLeagueForm } from "./NewLeagueForm";
 export { NewLeagueCategoryForm } from "./NewLeagueCategoryForm";
 export { NewTeamForm } from "./NewTeamForm";
 export { NewPlayerForm } from "./NewPlayerForm";
+export { NewVenueForm } from "./NewVenueForm";
 export { PlayerTechnicalSheetPanel } from "./PlayerTechnicalSheetPanel";
 export {
   LEAGUE_SHIELD_MAX_FILE_BYTES,

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import {
@@ -10,6 +10,7 @@ import {
   teams,
 } from "@/db/schema";
 
+import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "./season-pick";
 
 export type OwnedTeamDashboardRow = {
@@ -25,7 +26,7 @@ export type OwnedTeamDashboardRow = {
 };
 
 /**
- * Equipos de todas las ligas donde el usuario es dueño, con categoría y plantilla
+ * Equipos de ligas que el usuario gestiona (dueño o admin), con categoría y plantilla
  * referidas a la temporada objetivo por liga (misma heurística que las tarjetas de liga).
  */
 export async function listOwnedTeamDashboardRows(
@@ -33,10 +34,15 @@ export async function listOwnedTeamDashboardRows(
 ): Promise<OwnedTeamDashboardRow[]> {
   const db = getDb();
 
+  const leagueIdsManaged = await listManagedLeagueIdsForDashboardUser(ownerUserId);
+  if (leagueIdsManaged.length === 0) {
+    return [];
+  }
+
   const owned = await db
     .select({ id: leagues.id, name: leagues.name })
     .from(leagues)
-    .where(eq(leagues.ownerUserId, ownerUserId));
+    .where(inArray(leagues.id, leagueIdsManaged));
 
   if (owned.length === 0) {
     return [];

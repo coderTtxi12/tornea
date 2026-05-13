@@ -20,3 +20,14 @@ export {
   type DatabaseHealthResult,
   type DatabaseHealthStatus,
 } from "./system/database-health";
+export {
+  AppAuditEntityType,
+  listRecentAppAuditLogsForLeague,
+  recordAppAuditLog,
+  resolveActorLeagueRole,
+  type AppAuditAction,
+  type AppAuditFeedRow,
+  type LeagueMemberRole,
+  type RecordAppAuditLogInput,
+  type RecordAppAuditLogOptions,
+} from "./audit";

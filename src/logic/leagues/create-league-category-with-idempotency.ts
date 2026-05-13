@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import type { Db } from "@/db/client";
+import { userCanManageLeague } from "@/logic/leagues/league-dashboard-admin";
 import {
   leagueCategories,
   leagueCategoryCreateIdempotency,
@@ -78,7 +79,7 @@ async function pickUniqueCategoryCode(
 
 /**
  * Crea una fila en `league_categories` con idempotencia por usuario + clave HTTP.
- * Solo el dueño de la liga (`leagues.owner_user_id`) puede crear categorías.
+ * Dueño de la liga o administrador del panel.
  */
 export async function createLeagueCategoryWithIdempotency(
   appUserId: string,
@@ -131,13 +132,7 @@ export async function createLeagueCategoryWithIdempotency(
       return { replay: true, category: row[0] };
     }
 
-    const owner = await tx
-      .select({ id: leagues.id })
-      .from(leagues)
-      .where(and(eq(leagues.id, leagueId), eq(leagues.ownerUserId, appUserId)))
-      .limit(1);
-
-    if (!owner[0]) {
+    if (!(await userCanManageLeague(tx, leagueId, appUserId))) {
       throw new Error("FORBIDDEN");
     }
 

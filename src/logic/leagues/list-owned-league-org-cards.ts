@@ -3,6 +3,8 @@ import { asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { leagueCategories, leagues, matches, seasons, teams } from "@/db/schema";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "@/logic/leagues/season-pick";
+
+import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export type OwnedLeagueCategorySummary = {
@@ -109,12 +111,17 @@ function sportLabelFromCode(code: string): string {
 }
 
 /**
- * Ligas del dueño con conteos agregados para tarjetas “Ligas y organizaciones”.
+ * Ligas que el usuario gestiona (dueño o admin) con conteos para tarjetas.
  */
 export async function listOwnedLeaguesOrganizationCards(
   ownerUserId: string,
 ): Promise<OwnedLeagueOrgCard[]> {
   const db = getDb();
+
+  const leagueIdsManaged = await listManagedLeagueIdsForDashboardUser(ownerUserId);
+  if (leagueIdsManaged.length === 0) {
+    return [];
+  }
 
   const owned = await db
     .select({
@@ -126,7 +133,7 @@ export async function listOwnedLeaguesOrganizationCards(
       branding: leagues.branding,
     })
     .from(leagues)
-    .where(eq(leagues.ownerUserId, ownerUserId))
+    .where(inArray(leagues.id, leagueIdsManaged))
     .orderBy(asc(leagues.createdAt));
 
   if (owned.length === 0) {

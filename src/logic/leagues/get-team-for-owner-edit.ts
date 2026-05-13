@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { leagues, seasonTeams, seasons, teams } from "@/db/schema";
 
+import { userCanManageLeague } from "./league-dashboard-admin";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "./season-pick";
 import type { TeamRegistrationContacts } from "./create-team-in-league";
 
@@ -85,7 +86,7 @@ async function pickTargetSeasonIdForLeague(leagueId: string): Promise<string | n
 
 /**
  * Carga equipo + inscripción en temporada objetivo (si existe) para edición en panel.
- * Solo si `leagues.owner_user_id` coincide.
+ * Dueño o administrador del panel.
  */
 export async function getTeamForOwnerEdit(
   ownerUserId: string,
@@ -102,7 +103,6 @@ export async function getTeamForOwnerEdit(
       shortName: teams.shortName,
       crestUrl: teams.crestUrl,
       status: teams.status,
-      ownerId: leagues.ownerUserId,
     })
     .from(teams)
     .innerJoin(leagues, eq(teams.leagueId, leagues.id))
@@ -112,7 +112,7 @@ export async function getTeamForOwnerEdit(
   if (!row) {
     return "NOT_FOUND";
   }
-  if (row.ownerId !== ownerUserId) {
+  if (!(await userCanManageLeague(db, leagueId, ownerUserId))) {
     return "FORBIDDEN";
   }
 

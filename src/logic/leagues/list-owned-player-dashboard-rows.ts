@@ -5,6 +5,7 @@ import { leagues, players, seasons, teamRosters, teams } from "@/db/schema";
 
 import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
 
+import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "./season-pick";
 
 /** Máximo de filas por petición a BD (paginación servidor). */
@@ -57,7 +58,7 @@ export function parseOwnedPlayersCursor(raw: string | null | undefined): RosterC
 }
 
 /**
- * Jugadores en plantilla (`team_rosters`) de equipos de ligas propias,
+ * Jugadores en plantilla (`team_rosters`) de equipos de ligas gestionadas (dueño o admin),
  * limitado a la temporada objetivo por liga. Orden: alta en plantilla más reciente primero.
  * Paginación por cursor (clave compuesta registered_at + id).
  */
@@ -76,10 +77,15 @@ export async function listOwnedPlayerDashboardRowsPage(
 
   const db = getDb();
 
+  const leagueIdsManaged = await listManagedLeagueIdsForDashboardUser(ownerUserId);
+  if (leagueIdsManaged.length === 0) {
+    return { rows: [], nextCursor: null };
+  }
+
   const owned = await db
     .select({ id: leagues.id, name: leagues.name })
     .from(leagues)
-    .where(eq(leagues.ownerUserId, ownerUserId));
+    .where(inArray(leagues.id, leagueIdsManaged));
 
   if (owned.length === 0) {
     return { rows: [], nextCursor: null };
@@ -166,7 +172,7 @@ export async function listOwnedPlayerDashboardRowsPage(
     .innerJoin(seasons, eq(teamRosters.seasonId, seasons.id))
     .where(
       and(
-        eq(leagues.ownerUserId, ownerUserId),
+        inArray(leagues.id, leagueIds),
         eq(players.leagueId, teams.leagueId),
         eq(seasons.leagueId, teams.leagueId),
         inArray(teamRosters.seasonId, seasonIds),

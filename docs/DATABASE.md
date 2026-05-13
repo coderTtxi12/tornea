@@ -19,6 +19,7 @@ Complete reference for PostgreSQL (Drizzle ORM): **enums**, **tables**, **column
 flowchart TB
   users[users]
   dashboard_access_requests[dashboard_access_requests]
+  app_audit_logs[app_audit_logs]
   leagues[leagues]
   league_members[league_members]
   league_create_idempotency[league_create_idempotency]
@@ -32,6 +33,8 @@ flowchart TB
   matches[matches]
 
   users --> dashboard_access_requests
+  users --> app_audit_logs
+  leagues --> app_audit_logs
   users --> leagues
   users --> league_members
   users --> league_create_idempotency
@@ -196,6 +199,13 @@ Dedicated tables cover structured football data. Default **`sport_code`** is **`
 
 With Supabase, you typically add **Row Level Security (RLS)** and policies keyed by **`league_id`** / membership. Required for production if clients hit the DB or exposed APIs directly.
 
+### App audit log (web dashboard)
+
+Table **`app_audit_logs`** stores **append-only** events from the web app: which **`users`** row acted (`actor_user_id`), optional **role in league** at event time (`actor_league_role`), action (`create` / `update` / `delete`), entity type/id, short **`summary`**, and **`metadata`** JSON. Used for “Actividad reciente” (Agenda / Pendientes) and cross-cutting audit.
+
+- **Design and integration:** [AUDIT_LOGS.md](./AUDIT_LOGS.md).
+- **Code:** `src/logic/audit/` (`recordAppAuditLog`, `listRecentAppAuditLogsForLeague`).
+
 ---
 
 ## Enums (PostgreSQL types)
@@ -219,6 +229,7 @@ With Supabase, you typically add **Row Level Security (RLS)** and policies keyed
 | `lineup_slot` | `starter`, `bench` |
 | `match_report_kind` | `delegate`, `referee`, `press`, `internal` |
 | `football_foul_kind` | `violent_conduct`, `serious_foul_play`, `reckless_tackle`, `careless_foul`, `dissent`, `unsporting_behavior`, `handball`, `offside`, `simulation`, `other` |
+| `app_audit_action` | `create`, `update`, `delete` |
 
 ---
 
@@ -263,6 +274,27 @@ Waitlist / intake for users requesting **dashboard access** (before `users.dashb
 | `created_at` | timestamptz NOT NULL | Submission time. |
 
 Indexes: `user_id`, `created_at`.
+
+### `app_audit_logs`
+
+Bitácora de acciones desde la **app web** (dashboard). Filas **solo insert** desde código servidor; no actualizar ni borrar salvo políticas operativas (retención).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid PK | Event id. |
+| `actor_user_id` | uuid FK → `users.id` | Usuario que realizó la acción (`ON DELETE SET NULL`). |
+| `actor_display_name_snapshot` | text | Copia de `users.display_name` al momento del evento. |
+| `actor_email_snapshot` | text | Copia de `users.email` al momento del evento. |
+| `actor_league_role` | `league_member_role` | Rol en `league_id` al momento del evento (o inferido; ver [AUDIT_LOGS.md](./AUDIT_LOGS.md)). |
+| `league_id` | uuid FK → `leagues.id` | Alcance de liga para listados (`ON DELETE SET NULL`). |
+| `action` | `app_audit_action` NOT NULL | `create` / `update` / `delete`. |
+| `entity_type` | text NOT NULL | Recurso lógico (convención `snake_case`, p. ej. `player`, `team`). |
+| `entity_id` | uuid | Id de la fila afectada, si aplica. |
+| `summary` | text NOT NULL | Texto corto para feed / UI. |
+| `metadata` | jsonb NOT NULL | Contexto extra (equipo, temporada, etc.). |
+| `created_at` | timestamptz NOT NULL | Momento del evento. |
+
+Indexes: (`league_id`, `created_at`), (`actor_user_id`, `created_at`), (`entity_type`, `entity_id`).
 
 ### `leagues`
 
@@ -359,6 +391,7 @@ Playing venues owned by a league.
 | `name` | text NOT NULL | Venue name. |
 | `address` | text | Address. |
 | `notes` | text | Notes. |
+| `metadata` | jsonb NOT NULL DEFAULT `{}` | **Convention (app):** `surfaceType` (display string); optional `surfacePreset` / `surfaceCustom`; optional `availabilityNotes` (free text); optional `photos` — array of Storage refs `{ bucket, path, publicUrl, contentType }` (same shape as shield uploads). |
 | `sort_order` | integer NOT NULL DEFAULT 0 | Display order. |
 | `is_active` | boolean NOT NULL DEFAULT true | Soft disable. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
@@ -795,6 +828,8 @@ Prize draws / raffles scoped to a season.
 | `0006_lying_living_tribunal` | **`league_create_idempotency`**. |
 | `0007_lean_trish_tilby` | **`league_categories`** + enum **`league_category_gender`**; nullable **`season_teams.league_category_id`** and **`matches.league_category_id`**. |
 | `0008_unusual_catseye` | **`league_category_create_idempotency`** (idempotencia al crear categorías). |
+| `0009_eminent_praxagora` | Enum **`app_audit_action`**; tabla **`app_audit_logs`** (auditoría app web). |
+| `0010_closed_hairball` | **`venues.metadata`** (jsonb default `{}`). |
 
 ---
 
