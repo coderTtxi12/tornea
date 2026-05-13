@@ -15,6 +15,8 @@ export type NewPlayerInsert = {
   leagueId: string;
   teamId: string;
   fullName: string;
+  /** `YYYY-MM-DD` → columna `players.birth_date`. */
+  birthDate: string;
   /** `null` si no se capturó. Se guarda en `team_rosters.shirt_number`. */
   shirtNumber: number | null;
   /** Texto libre opcional. Se guarda en `team_rosters.position`. */
@@ -84,6 +86,7 @@ export async function createPlayerInTeam(args: NewPlayerInsert): Promise<Created
       .values({
         leagueId: args.leagueId,
         fullName: args.fullName.trim(),
+        birthDate: args.birthDate,
         metadata: baseMetadata,
       })
       .returning({ id: players.id });

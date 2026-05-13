@@ -11,12 +11,64 @@ import { findDialOptionByIso2 } from "@/lib/phone/country-dial-options";
  * - WhatsApp es opcional; si lo tocás, el número local debe ser válido para el país.
  * - Número de camiseta es opcional, entero entre 0 y 999 (varios deportes admiten 0).
  * - Posición es texto libre, opcional, máx. 60 caracteres.
+ * - Fecha de nacimiento obligatoria (`YYYY-MM-DD`), anterior a hoy, año ≥ 1900.
  */
+function addBirthDateFieldIssues(val: string, ctx: z.RefinementCtx) {
+  const s = val.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Selecciona una fecha de nacimiento válida.",
+      path: ["birthDate"],
+    });
+    return;
+  }
+  const [yStr, mStr, dStr] = s.split("-");
+  const y = Number(yStr);
+  const mo = Number(mStr);
+  const d = Number(dStr);
+  if (!y || !mo || !d || mo < 1 || mo > 12 || d < 1 || d > 31) {
+    ctx.addIssue({
+      code: "custom",
+      message: "La fecha de nacimiento no es válida.",
+      path: ["birthDate"],
+    });
+    return;
+  }
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
+    ctx.addIssue({
+      code: "custom",
+      message: "La fecha de nacimiento no es válida.",
+      path: ["birthDate"],
+    });
+    return;
+  }
+  if (y < 1900) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Revisa el año de nacimiento.",
+      path: ["birthDate"],
+    });
+    return;
+  }
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  if (dt.getTime() >= todayUtc) {
+    ctx.addIssue({
+      code: "custom",
+      message: "La fecha de nacimiento debe ser anterior a hoy.",
+      path: ["birthDate"],
+    });
+  }
+}
+
 export const newPlayerFormFieldsSchema = z
   .object({
     teamId: z.string().uuid("Selecciona un equipo válido."),
     leagueId: z.string().uuid("Liga no válida."),
     fullName: z.string().trim().min(2, "Captura el nombre del jugador.").max(160),
+    birthDate: z.string().trim().min(1, "Captura la fecha de nacimiento del jugador."),
     /** Vacío = sin número. Si trae algo, debe ser entero 0–999. */
     shirtNumber: z.string().trim(),
     /** Texto libre opcional (POR, DEF, MC, DEL, etc.). */
@@ -26,6 +78,8 @@ export const newPlayerFormFieldsSchema = z
     whatsappPhoneNational: z.string().trim(),
   })
   .superRefine((data, ctx) => {
+    addBirthDateFieldIssues(data.birthDate, ctx);
+
     const numRaw = data.shirtNumber.replace(/\D/g, "");
     if (data.shirtNumber.trim().length > 0 && numRaw.length === 0) {
       ctx.addIssue({

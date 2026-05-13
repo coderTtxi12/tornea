@@ -89,6 +89,14 @@ function teamMatchesQuery(t: MyLeaguesTeamRow, queryNorm: string): boolean {
   return haystack.includes(queryNorm);
 }
 
+/** Fecha local `YYYY-MM-DD` (límite superior de nacimiento = hoy). */
+function localIsoDateString(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function NewPlayerForm({
   teamRows,
   onClose,
@@ -96,6 +104,7 @@ export function NewPlayerForm({
   prefillTeamId,
 }: NewPlayerFormProps) {
   const countryDialOptions = useMemo(() => getCountryDialOptions(), []);
+  const birthDateMax = useMemo(() => localIsoDateString(), []);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const curpInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +126,7 @@ export function NewPlayerForm({
   const teamSearchInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [shirtNumber, setShirtNumber] = useState("");
   const [positionPreset, setPositionPreset] = useState<string>("");
   const [positionCustom, setPositionCustom] = useState<string>("");
@@ -277,6 +287,7 @@ export function NewPlayerForm({
     setTeamListOpen(false);
     setTeamHighlight(-1);
     setFullName("");
+    setBirthDate("");
     setShirtNumber("");
     setPositionPreset("");
     setPositionCustom("");
@@ -318,6 +329,7 @@ export function NewPlayerForm({
 
     const fd = new FormData();
     fd.set("fullName", fullName);
+    fd.set("birthDate", birthDate);
     fd.set("shirtNumber", shirtNumber);
     fd.set("position", positionToSubmit);
     fd.set("whatsappCountryIso", whatsappCountryIso);
@@ -383,8 +395,8 @@ export function NewPlayerForm({
   return (
     <div className="w-full">
       <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
-        El jugador se guarda en <span className="text-foreground font-medium">players</span> y se
-        inscribe en la plantilla del equipo (
+        El jugador se guarda en <span className="text-foreground font-medium">players</span>{" "}
+        (nombre, fecha de nacimiento) y se inscribe en la plantilla del equipo (
         <span className="text-foreground font-medium">team_rosters</span>) en la temporada
         objetivo de la liga. La foto y la CURP se suben al bucket de Storage.
       </p>
@@ -544,6 +556,26 @@ export function NewPlayerForm({
           />
           {fieldErrors.fullName ? (
             <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.fullName}</span>
+          ) : null}
+        </label>
+
+        <label className="block">
+          <span className="text-foreground-muted text-xs font-medium">Fecha de nacimiento</span>
+          <input
+            id="player-birth-date"
+            type="date"
+            name="birthDate"
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+            required
+            min="1900-01-01"
+            max={birthDateMax}
+            autoComplete="bday"
+            className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+            aria-invalid={!!fieldErrors.birthDate}
+          />
+          {fieldErrors.birthDate ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.birthDate}</span>
           ) : null}
         </label>
 
