@@ -25,23 +25,33 @@ export function DashboardViewSwitch({
   leagueOrgCards,
   teamRows,
   playerRows,
+  playersNextCursor,
+  onLoadMorePlayers,
+  playersLoadingMore,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
   onOpenRegisterPlayerDrawer,
-  onOpenEditPlayerDrawer,
+  onOpenPlayerSheetDrawer,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
   teamRows: readonly MyLeaguesTeamRow[];
   playerRows: readonly MyLeaguesPlayerRow[];
+  playersNextCursor: string | null;
+  onLoadMorePlayers?: () => Promise<{
+    ok: boolean;
+    playerCount: number;
+    hasMore: boolean;
+  } | null>;
+  playersLoadingMore?: boolean;
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
   onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
-  onOpenEditPlayerDrawer: (args: {
+  onOpenPlayerSheetDrawer: (args: {
     leagueId: string;
     teamId: string;
     playerId: string;
@@ -74,9 +84,12 @@ export function DashboardViewSwitch({
       return (
         <DashboardPlayersView
           playerRows={playerRows}
+          playersNextCursor={playersNextCursor}
+          onLoadMorePlayers={onLoadMorePlayers}
+          playersLoadingMore={playersLoadingMore}
           hasTeams={teamRows.length > 0}
           onOpenRegisterPlayerDrawer={onOpenRegisterPlayerDrawer}
-          onOpenEditPlayerDrawer={onOpenEditPlayerDrawer}
+          onOpenPlayerSheetDrawer={onOpenPlayerSheetDrawer}
         />
       );
     case "venues":

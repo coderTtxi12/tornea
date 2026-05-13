@@ -39,6 +39,48 @@ export async function resolvePlayerPhotoForImgDisplay(metadata: unknown): Promis
   return resolveSupabaseStorageUrlForImgDisplay(fromPublicField);
 }
 
+function playerCurpBucketAndPath(metadata: unknown): { bucket: string; path: string } | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const raw = (metadata as Record<string, unknown>).curp;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const bucket = typeof o.bucket === "string" ? o.bucket.trim() : "";
+  const path = typeof o.path === "string" ? o.path.replace(/^\/+/, "").trim() : "";
+  if (!bucket || !path) return null;
+  return { bucket, path };
+}
+
+function curpPublicUrlFromMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const raw = (metadata as Record<string, unknown>).curp;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const camel = typeof o.publicUrl === "string" ? o.publicUrl.trim() : "";
+  const snake = typeof o.public_url === "string" ? o.public_url.trim() : "";
+  return camel || snake || null;
+}
+
+/**
+ * URL firmada (o pública resuelta) para descargar el archivo CURP en `metadata.curp`.
+ */
+export async function resolvePlayerCurpForDownload(metadata: unknown): Promise<string | null> {
+  const ref = playerCurpBucketAndPath(metadata);
+  const service = createServiceRoleClient();
+  if (ref && service) {
+    try {
+      const { data, error } = await service.storage
+        .from(ref.bucket)
+        .createSignedUrl(ref.path, SIGNED_URL_TTL_SECONDS);
+      if (!error && data?.signedUrl) {
+        return data.signedUrl;
+      }
+    } catch {
+      /* fallback */
+    }
+  }
+  return resolveSupabaseStorageUrlForImgDisplay(curpPublicUrlFromMetadata(metadata));
+}
+
 /**
  * URLs de `getPublicUrl` tienen forma
  * `.../storage/v1/object/public/<bucket>/<path>`. Si el bucket es privado, el navegador no puede

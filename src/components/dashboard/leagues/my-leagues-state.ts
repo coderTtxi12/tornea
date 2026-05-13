@@ -53,6 +53,8 @@ export type MyLeaguesPlayerRow = {
   fullName: string;
   shirtNumber: number | null;
   position: string | null;
+  /** ISO — alta en plantilla (`team_rosters.registered_at`). */
+  registeredAt: string;
   /** Foto de perfil si está en metadata del jugador. */
   profileImageUrl?: string | null;
 };
@@ -65,4 +67,6 @@ export type DashboardMyLeaguesState =
       items: readonly MyLeaguesApiItem[];
       teams: readonly MyLeaguesTeamRow[];
       players: readonly MyLeaguesPlayerRow[];
+      /** Paginación servidor (máx. 50 filas por carga); `null` si no hay más. */
+      playersNextCursor: string | null;
     };

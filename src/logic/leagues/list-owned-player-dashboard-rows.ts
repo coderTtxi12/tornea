@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { leagues, players, seasons, teamRosters, teams } from "@/db/schema";
@@ -6,6 +6,9 @@ import { leagues, players, seasons, teamRosters, teams } from "@/db/schema";
 import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
 
 import { pickTargetSeasonIdFromCandidates, type SeasonPickRow } from "./season-pick";
+
+/** Máximo de filas por petición a BD (paginación servidor). */
+export const OWNED_PLAYERS_API_PAGE_LIMIT = 50;
 
 export type OwnedPlayerDashboardRow = {
   /** `team_rosters.id` (fila única en la tabla). */
@@ -19,17 +22,58 @@ export type OwnedPlayerDashboardRow = {
   fullName: string;
   shirtNumber: number | null;
   position: string | null;
+  /** ISO — `team_rosters.registered_at` (cuándo entró a la plantilla). */
+  registeredAt: string;
   /** URL lista para `<img>` (firmada si el bucket de Storage es privado). */
   profileImageUrl: string | null;
 };
 
+type RosterCursor = { registeredAt: Date; id: string };
+
+export function encodeOwnedPlayersCursor(row: {
+  registeredAt: Date;
+  id: string;
+}): string {
+  return Buffer.from(
+    JSON.stringify({ t: row.registeredAt.toISOString(), id: row.id }),
+    "utf8",
+  ).toString("base64url");
+}
+
+export function parseOwnedPlayersCursor(raw: string | null | undefined): RosterCursor | null {
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const json = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as {
+      t?: string;
+      id?: string;
+    };
+    if (!json.t || !json.id) return null;
+    const registeredAt = new Date(json.t);
+    if (Number.isNaN(registeredAt.getTime())) return null;
+    return { registeredAt, id: json.id };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Jugadores en plantilla (`team_rosters`) de equipos de ligas propias,
- * limitado a la temporada objetivo por liga (misma heurística que equipos / tarjetas).
+ * limitado a la temporada objetivo por liga. Orden: alta en plantilla más reciente primero.
+ * Paginación por cursor (clave compuesta registered_at + id).
  */
-export async function listOwnedPlayerDashboardRows(
+export async function listOwnedPlayerDashboardRowsPage(
   ownerUserId: string,
-): Promise<OwnedPlayerDashboardRow[]> {
+  options?: { limit?: number; cursor?: string | null },
+): Promise<{
+  rows: OwnedPlayerDashboardRow[];
+  nextCursor: string | null;
+}> {
+  const limitCap = Math.min(
+    Math.max(options?.limit ?? OWNED_PLAYERS_API_PAGE_LIMIT, 1),
+    OWNED_PLAYERS_API_PAGE_LIMIT,
+  );
+  const cursorPayload = parseOwnedPlayersCursor(options?.cursor ?? null);
+
   const db = getDb();
 
   const owned = await db
@@ -38,7 +82,7 @@ export async function listOwnedPlayerDashboardRows(
     .where(eq(leagues.ownerUserId, ownerUserId));
 
   if (owned.length === 0) {
-    return [];
+    return { rows: [], nextCursor: null };
   }
 
   const leagueIds = owned.map((l) => l.id);
@@ -52,7 +96,7 @@ export async function listOwnedPlayerDashboardRows(
     .where(inArray(teams.leagueId, leagueIds));
 
   if (teamRows.length === 0) {
-    return [];
+    return { rows: [], nextCursor: null };
   }
 
   const teamIds = teamRows.map((t) => t.id);
@@ -86,14 +130,26 @@ export async function listOwnedPlayerDashboardRows(
     ),
   ];
   if (seasonIds.length === 0) {
-    return [];
+    return { rows: [], nextCursor: null };
   }
+
+  const cursorWhere =
+    cursorPayload == null
+      ? undefined
+      : or(
+          lt(teamRosters.registeredAt, cursorPayload.registeredAt),
+          and(
+            eq(teamRosters.registeredAt, cursorPayload.registeredAt),
+            lt(teamRosters.id, cursorPayload.id),
+          ),
+        );
 
   const rosterRows = await db
     .select({
       id: teamRosters.id,
       shirtNumber: teamRosters.shirtNumber,
       position: teamRosters.position,
+      registeredAt: teamRosters.registeredAt,
       playerId: players.id,
       fullName: players.fullName,
       metadata: players.metadata,
@@ -115,17 +171,17 @@ export async function listOwnedPlayerDashboardRows(
         eq(seasons.leagueId, teams.leagueId),
         inArray(teamRosters.seasonId, seasonIds),
         inArray(teamRosters.teamId, teamIds),
+        cursorWhere,
       ),
     )
-    .orderBy(
-      asc(leagues.name),
-      asc(teams.name),
-      asc(players.fullName),
-      asc(teamRosters.shirtNumber),
-    );
+    .orderBy(desc(teamRosters.registeredAt), desc(teamRosters.id))
+    .limit(limitCap + 1);
 
-  return Promise.all(
-    rosterRows.map(async (r) => ({
+  const hasMore = rosterRows.length > limitCap;
+  const pageRows = hasMore ? rosterRows.slice(0, limitCap) : rosterRows;
+
+  const rows = await Promise.all(
+    pageRows.map(async (r) => ({
       id: r.id,
       playerId: r.playerId,
       leagueId: r.leagueId,
@@ -136,7 +192,16 @@ export async function listOwnedPlayerDashboardRows(
       fullName: r.fullName,
       shirtNumber: r.shirtNumber,
       position: r.position,
+      registeredAt: r.registeredAt.toISOString(),
       profileImageUrl: await resolvePlayerPhotoForImgDisplay(r.metadata),
     })),
   );
+
+  const last = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && last != null
+      ? encodeOwnedPlayersCursor({ registeredAt: last.registeredAt, id: last.id })
+      : null;
+
+  return { rows, nextCursor };
 }

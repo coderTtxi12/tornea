@@ -86,9 +86,23 @@ function PlayerAvatarCell({ row }: { row: MyLeaguesPlayerRow }) {
 
 type FilterColumn = "league" | "club" | "position";
 
-type SortState = { key: "name" | "shirt"; dir: "asc" | "desc" };
+function formatRegisteredAtShort(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  return new Date(t).toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
-const DEFAULT_SORT: SortState = { key: "name", dir: "asc" };
+const UI_PAGE_SIZE = 20;
+
+type SortKey = "name" | "shirt" | "added";
+
+type SortState = { key: SortKey; dir: "asc" | "desc" };
+
+const DEFAULT_SORT: SortState = { key: "added", dir: "desc" };
 
 function isDefaultSort(s: SortState): boolean {
   return s.key === DEFAULT_SORT.key && s.dir === DEFAULT_SORT.dir;
@@ -102,9 +116,9 @@ function SortDirGlyphs({
   dir,
   column,
 }: {
-  activeColumn: "name" | "shirt";
+  activeColumn: SortKey;
   dir: "asc" | "desc";
-  column: "name" | "shirt";
+  column: SortKey;
 }) {
   const on = activeColumn === column;
   const idle = "text-[#d1d5db] transition-colors group-hover:text-brand-teal/50";
@@ -201,14 +215,35 @@ function cmpShirt(a: number | null, b: number | null, dir: "asc" | "desc"): numb
   return dir === "asc" ? v : -v;
 }
 
+function cmpAdded(isoA: string, isoB: string, dir: "asc" | "desc"): number {
+  const a = Date.parse(isoA);
+  const b = Date.parse(isoB);
+  const aNaN = Number.isNaN(a);
+  const bNaN = Number.isNaN(b);
+  if (aNaN && bNaN) return 0;
+  if (aNaN) return 1;
+  if (bNaN) return -1;
+  const v = a - b;
+  return dir === "asc" ? v : -v;
+}
+
 export type PlayersFilterableTableHandle = {
   clearAllFilters: () => void;
 };
 
 export type PlayersFilterableTableProps = {
   playerRows: readonly MyLeaguesPlayerRow[];
-  /** Clic en la fila (como equipos): abre edición del jugador. */
-  onEditPlayer: (args: { leagueId: string; teamId: string; playerId: string }) => void;
+  /** Paginación servidor; `null` si ya no hay más bloques de hasta 50 filas. */
+  playersNextCursor: string | null;
+  /** Carga el siguiente bloque desde la API; debe actualizar el estado del padre antes de resolver. */
+  onLoadMorePlayers?: () => Promise<{
+    ok: boolean;
+    playerCount: number;
+    hasMore: boolean;
+  } | null>;
+  loadingMorePlayers?: boolean;
+  /** Ficha técnica (slide separado del formulario de edición). */
+  onViewPlayerSheet: (args: { leagueId: string; teamId: string; playerId: string }) => void;
   wrapperClassName?: string;
   onHasActiveFiltersChange?: (active: boolean) => void;
 };
@@ -217,10 +252,19 @@ export const PlayersFilterableTable = forwardRef<
   PlayersFilterableTableHandle,
   PlayersFilterableTableProps
 >(function PlayersFilterableTable(
-  { playerRows, onEditPlayer, wrapperClassName, onHasActiveFiltersChange },
+  {
+    playerRows,
+    playersNextCursor,
+    onLoadMorePlayers,
+    loadingMorePlayers = false,
+    onViewPlayerSheet,
+    wrapperClassName,
+    onHasActiveFiltersChange,
+  },
   ref,
 ) {
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
+  const [page, setPage] = useState(1);
   const [filterLeague, setFilterLeague] = useState<Set<string>>(() => new Set());
   const [filterClub, setFilterClub] = useState<Set<string>>(() => new Set());
   const [filterPosition, setFilterPosition] = useState<Set<string>>(() => new Set());
@@ -256,6 +300,7 @@ export const PlayersFilterableTable = forwardRef<
         setFilterClub(new Set());
         setFilterPosition(new Set());
         setSort(DEFAULT_SORT);
+        setPage(1);
         closeFilter();
       },
     }),
@@ -301,6 +346,10 @@ export const PlayersFilterableTable = forwardRef<
     };
   }, [playerRows]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [filterLeague, filterClub, filterPosition]);
+
   const filteredSortedRows = useMemo(() => {
     let list = [...playerRows];
 
@@ -315,22 +364,78 @@ export const PlayersFilterableTable = forwardRef<
     }
 
     list.sort((a, b) => {
-      let cmp = 0;
       if (sort.key === "name") {
-        cmp = a.fullName.localeCompare(b.fullName, "es", { sensitivity: "base" });
-      } else {
-        cmp = cmpShirt(a.shirtNumber, b.shirtNumber, sort.dir);
+        const cmp = a.fullName.localeCompare(b.fullName, "es", { sensitivity: "base" });
+        return sort.dir === "asc" ? cmp : -cmp;
       }
-      return sort.key === "name" ? (sort.dir === "asc" ? cmp : -cmp) : cmp;
+      if (sort.key === "shirt") {
+        return cmpShirt(a.shirtNumber, b.shirtNumber, sort.dir);
+      }
+      return cmpAdded(a.registeredAt, b.registeredAt, sort.dir);
     });
 
     return list;
   }, [playerRows, sort, filterLeague, filterClub, filterPosition]);
 
-  function toggleSortColumn(column: "name" | "shirt") {
+  const filtersClear =
+    filterLeague.size === 0 && filterClub.size === 0 && filterPosition.size === 0;
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredSortedRows.length / UI_PAGE_SIZE));
+    setPage((p) => Math.min(p, maxPage));
+  }, [filteredSortedRows.length]);
+
+  const totalFiltered = filteredSortedRows.length;
+  const pageStart = (page - 1) * UI_PAGE_SIZE;
+  const visibleRows = filteredSortedRows.slice(pageStart, pageStart + UI_PAGE_SIZE);
+
+  const canGoNext =
+    totalFiltered > page * UI_PAGE_SIZE ||
+    (filtersClear && Boolean(playersNextCursor && onLoadMorePlayers));
+
+  const goPrevPage = useCallback(() => {
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  const goNextPage = useCallback(async () => {
+    const targetPage = page + 1;
+    const requiredCount = targetPage * UI_PAGE_SIZE;
+
+    if (!filtersClear) {
+      if (totalFiltered > page * UI_PAGE_SIZE) {
+        setPage(targetPage);
+      }
+      return;
+    }
+
+    let count = totalFiltered;
+    while (count < requiredCount && onLoadMorePlayers) {
+      const r = await onLoadMorePlayers();
+      if (!r?.ok) break;
+      count = r.playerCount;
+      if (!r.hasMore) break;
+    }
+
+    if (count > (targetPage - 1) * UI_PAGE_SIZE) {
+      setPage(targetPage);
+    }
+  }, [
+    page,
+    totalFiltered,
+    filtersClear,
+    onLoadMorePlayers,
+  ]);
+
+  function toggleSortColumn(column: SortKey) {
+    setPage(1);
+    const dirDefaults: Record<SortKey, "asc" | "desc"> = {
+      name: "asc",
+      shirt: "asc",
+      added: "desc",
+    };
     setSort((s) => {
       if (s.key === column) return { key: column, dir: s.dir === "asc" ? "desc" : "asc" };
-      return { key: column, dir: "asc" };
+      return { key: column, dir: dirDefaults[column] };
     });
   }
 
@@ -485,7 +590,7 @@ export const PlayersFilterableTable = forwardRef<
   return (
     <>
       <div className={wrap}>
-        <table className="w-full min-w-[44rem] text-left text-sm">
+        <table className="w-full min-w-[52rem] text-left text-sm">
           <thead>
             <tr className="text-foreground-muted border-border border-b text-[11px] font-bold tracking-wide uppercase">
               <th className="px-4 py-3 align-top">
@@ -544,6 +649,28 @@ export const PlayersFilterableTable = forwardRef<
                 {headerFilterColumn("position", "Pos.", filterPosition)}
                 {selectedTagsChips(filterPosition, setFilterPosition, "Posición")}
               </th>
+              <th className="px-4 py-3 align-top">
+                <button
+                  type="button"
+                  className={`${tableHeaderBtnClass} whitespace-nowrap`}
+                  title={
+                    sort.key === "added"
+                      ? sort.dir === "desc"
+                        ? "Recientes primero"
+                        : "Antiguos primero"
+                      : "Ordenar por fecha de alta en plantilla"
+                  }
+                  aria-label={
+                    sort.key === "added"
+                      ? `Ordenar alta ${sort.dir === "desc" ? "más reciente primero" : "más antigua primero"}`
+                      : "Ordenar por fecha de alta en plantilla"
+                  }
+                  onClick={() => toggleSortColumn("added")}
+                >
+                  <span>Alta</span>
+                  <SortDirGlyphs activeColumn={sort.key} dir={sort.dir} column="added" />
+                </button>
+              </th>
               <th className="px-4 py-3 align-top" />
             </tr>
           </thead>
@@ -551,21 +678,21 @@ export const PlayersFilterableTable = forwardRef<
             {filteredSortedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="text-foreground-muted px-4 py-6 text-center text-sm"
                 >
                   Ningún jugador coincide con los filtros seleccionados.
                 </td>
               </tr>
             ) : (
-              filteredSortedRows.map((p) => (
+              visibleRows.map((p) => (
                 <tr
                   key={p.id}
                   role="button"
                   tabIndex={0}
                   className="hover:bg-surface-code/20 cursor-pointer transition-colors"
                   onClick={() =>
-                    onEditPlayer({
+                    onViewPlayerSheet({
                       leagueId: p.leagueId,
                       teamId: p.teamId,
                       playerId: p.playerId,
@@ -574,7 +701,7 @@ export const PlayersFilterableTable = forwardRef<
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      onEditPlayer({
+                      onViewPlayerSheet({
                         leagueId: p.leagueId,
                         teamId: p.teamId,
                         playerId: p.playerId,
@@ -595,13 +722,16 @@ export const PlayersFilterableTable = forwardRef<
                       {positionLabel(p)}
                     </span>
                   </td>
+                  <td className="text-foreground-muted px-4 py-2.5 whitespace-nowrap tabular-nums">
+                    {formatRegisteredAtShort(p.registeredAt ?? "")}
+                  </td>
                   <td className="px-4 py-2.5 text-right">
                     <button
                       type="button"
                       className="text-foreground-muted hover:text-foreground border border-transparent px-2 py-1 text-xs font-semibold underline-offset-4 hover:underline"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onEditPlayer({
+                        onViewPlayerSheet({
                           leagueId: p.leagueId,
                           teamId: p.teamId,
                           playerId: p.playerId,
@@ -616,6 +746,45 @@ export const PlayersFilterableTable = forwardRef<
             )}
           </tbody>
         </table>
+        {totalFiltered > 0 ? (
+          <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+            <p className="text-foreground-muted text-[13px] leading-snug">
+              Mostrando{" "}
+              <span className="text-foreground font-semibold tabular-nums">
+                {pageStart + 1}–{pageStart + visibleRows.length}
+              </span>{" "}
+              de{" "}
+              <span className="text-foreground font-semibold tabular-nums">
+                {totalFiltered}
+                {filtersClear && playersNextCursor ? "+" : ""}
+              </span>
+              {filtersClear ? (
+                <span className="text-foreground-subtle"> ({UI_PAGE_SIZE} por página)</span>
+              ) : null}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || loadingMorePlayers}
+                className="border-border bg-background-muted/50 text-foreground cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => void goPrevPage()}
+              >
+                Anterior
+              </button>
+              <span className="text-foreground-muted tabular-nums text-xs font-semibold">
+                Pág. {page}
+              </span>
+              <button
+                type="button"
+                disabled={!canGoNext || loadingMorePlayers}
+                className="border-border bg-background-muted/50 text-foreground cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => void goNextPage()}
+              >
+                {loadingMorePlayers ? "Cargando…" : "Siguiente"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
       {renderFilterPortal()}
     </>

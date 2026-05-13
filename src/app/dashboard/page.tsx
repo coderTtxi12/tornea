@@ -21,6 +21,7 @@ type LeaguesMyApiResponse = {
   leagues: MyLeaguesApiItem[];
   teams?: MyLeaguesTeamRow[];
   players?: MyLeaguesPlayerRow[];
+  playersNextCursor?: string | null;
 };
 
 export default function DashboardPage() {
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const [myLeagues, setMyLeagues] = useState<DashboardMyLeaguesState>({
     status: "loading",
   });
+  const [playersLoadingMore, setPlayersLoadingMore] = useState(false);
   const [refetchKey, setRefetchKey] = useState(0);
 
   useEffect(() => {
@@ -75,6 +77,7 @@ export default function DashboardPage() {
           items: data.leagues ?? [],
           teams: data.teams ?? [],
           players: data.players ?? [],
+          playersNextCursor: data.playersNextCursor ?? null,
         });
       } catch {
         if (!cancelled) {
@@ -120,6 +123,54 @@ export default function DashboardPage() {
   const photo = getAvatarUrl(user);
   const initial = name.slice(0, 1).toUpperCase();
 
+  async function handleLoadMorePlayers(): Promise<{
+    ok: boolean;
+    playerCount: number;
+    hasMore: boolean;
+  } | null> {
+    if (myLeagues.status !== "ready" || playersLoadingMore) return null;
+    const cursor = myLeagues.playersNextCursor;
+    if (!cursor) return null;
+    setPlayersLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/leagues/my/players?cursor=${encodeURIComponent(cursor)}`,
+        { method: "GET" },
+      );
+      if (res.status === 401) {
+        router.replace("/");
+        return null;
+      }
+      if (!res.ok) return { ok: false, playerCount: myLeagues.players.length, hasMore: true };
+      const body = (await res.json()) as {
+        players?: MyLeaguesPlayerRow[];
+        nextCursor?: string | null;
+      };
+      const chunk = body.players ?? [];
+      const nextCursor = body.nextCursor ?? null;
+
+      let playerCount = myLeagues.players.length;
+      let hasMore = nextCursor != null;
+
+      setMyLeagues((prev) => {
+        if (prev.status !== "ready") return prev;
+        const seen = new Set(prev.players.map((p) => p.id));
+        const merged = chunk.filter((p) => !seen.has(p.id));
+        playerCount = prev.players.length + merged.length;
+        hasMore = nextCursor != null;
+        return {
+          ...prev,
+          players: [...prev.players, ...merged],
+          playersNextCursor: nextCursor,
+        };
+      });
+
+      return { ok: true, playerCount, hasMore };
+    } finally {
+      setPlayersLoadingMore(false);
+    }
+  }
+
   return (
     <DashboardArenaLayout
       avatarUrl={photo}
@@ -129,6 +180,8 @@ export default function DashboardPage() {
       authConfigured={configured}
       myLeagues={myLeagues}
       onLeagueCreated={() => setRefetchKey((k) => k + 1)}
+      onLoadMorePlayers={handleLoadMorePlayers}
+      playersLoadingMore={playersLoadingMore}
     />
   );
 }

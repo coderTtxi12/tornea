@@ -11,14 +11,24 @@ import { DashboardViewHeader } from "./dashboard-view-primitives";
 
 export function DashboardPlayersView({
   playerRows,
+  playersNextCursor,
+  onLoadMorePlayers,
+  playersLoadingMore,
   hasTeams,
   onOpenRegisterPlayerDrawer,
-  onOpenEditPlayerDrawer,
+  onOpenPlayerSheetDrawer,
 }: {
   playerRows: readonly MyLeaguesPlayerRow[];
+  playersNextCursor: string | null;
+  onLoadMorePlayers?: () => Promise<{
+    ok: boolean;
+    playerCount: number;
+    hasMore: boolean;
+  } | null>;
+  playersLoadingMore?: boolean;
   hasTeams: boolean;
   onOpenRegisterPlayerDrawer: (args?: { prefillTeamId?: string }) => void;
-  onOpenEditPlayerDrawer: (args: {
+  onOpenPlayerSheetDrawer: (args: {
     leagueId: string;
     teamId: string;
     playerId: string;
@@ -41,7 +51,7 @@ export function DashboardPlayersView({
               disabled={!borrarFiltrosEnabled}
               title={
                 borrarFiltrosEnabled
-                  ? "Quita filtros de columnas y restablece el orden (Jugador A→Z, ascendente)"
+                  ? "Quita filtros de columnas y restablece el orden (Alta más reciente primero)"
                   : "No hay filtros ni cambios de orden que limpiar"
               }
               onClick={() => tableRef.current?.clearAllFilters()}
@@ -74,7 +84,10 @@ export function DashboardPlayersView({
         <PlayersFilterableTable
           ref={tableRef}
           playerRows={playerRows}
-          onEditPlayer={onOpenEditPlayerDrawer}
+          playersNextCursor={playersNextCursor}
+          onLoadMorePlayers={onLoadMorePlayers}
+          loadingMorePlayers={playersLoadingMore}
+          onViewPlayerSheet={onOpenPlayerSheetDrawer}
           onHasActiveFiltersChange={setCanClearTable}
         />
       )}

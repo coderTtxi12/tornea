@@ -13,6 +13,7 @@ import {
   NewLeagueForm,
   NewPlayerForm,
   NewTeamForm,
+  PlayerTechnicalSheetPanel,
   type DashboardMyLeaguesState,
 } from "./leagues";
 import {
@@ -30,6 +31,12 @@ export type DashboardArenaLayoutProps = {
   authConfigured: boolean;
   myLeagues: DashboardMyLeaguesState;
   onLeagueCreated?: () => void;
+  onLoadMorePlayers?: () => Promise<{
+    ok: boolean;
+    playerCount: number;
+    hasMore: boolean;
+  } | null>;
+  playersLoadingMore?: boolean;
 };
 
 type RightDrawerState =
@@ -39,7 +46,8 @@ type RightDrawerState =
   | { kind: "register-team" }
   | { kind: "edit-team"; leagueId: string; teamId: string }
   | { kind: "register-player"; prefillTeamId?: string }
-  | { kind: "edit-player"; leagueId: string; teamId: string; playerId: string };
+  | { kind: "edit-player"; leagueId: string; teamId: string; playerId: string }
+  | { kind: "player-sheet"; leagueId: string; teamId: string; playerId: string };
 
 function IconSettings({ className }: { className?: string }) {
   return (
@@ -128,6 +136,8 @@ export function DashboardArenaLayout({
   authConfigured,
   myLeagues,
   onLeagueCreated,
+  onLoadMorePlayers,
+  playersLoadingMore,
 }: DashboardArenaLayoutProps) {
   const [nav, setNav] = useState<DashboardNavKey>("home");
   const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
@@ -170,6 +180,13 @@ export function DashboardArenaLayout({
     (args: { leagueId: string; teamId: string; playerId: string }) => {
       setPlayerFormKey((k) => k + 1);
       setDrawer({ kind: "edit-player", ...args });
+    },
+    [],
+  );
+
+  const openPlayerSheetDrawer = useCallback(
+    (args: { leagueId: string; teamId: string; playerId: string }) => {
+      setDrawer({ kind: "player-sheet", ...args });
     },
     [],
   );
@@ -276,12 +293,17 @@ export function DashboardArenaLayout({
                   }
                   teamRows={myLeagues.status === "ready" ? myLeagues.teams : []}
                   playerRows={myLeagues.status === "ready" ? myLeagues.players : []}
+                  playersNextCursor={
+                    myLeagues.status === "ready" ? myLeagues.playersNextCursor : null
+                  }
+                  onLoadMorePlayers={onLoadMorePlayers}
+                  playersLoadingMore={playersLoadingMore}
                   onOpenNewLeagueDrawer={openNewLeagueDrawer}
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
                   onOpenRegisterTeamDrawer={openRegisterTeamDrawer}
                   onOpenEditTeamDrawer={openEditTeamDrawer}
                   onOpenRegisterPlayerDrawer={openRegisterPlayerDrawer}
-                  onOpenEditPlayerDrawer={openEditPlayerDrawer}
+                  onOpenPlayerSheetDrawer={openPlayerSheetDrawer}
                 />
               )}
             </div>
@@ -294,7 +316,7 @@ export function DashboardArenaLayout({
       {drawer.kind !== "closed" ? (
         <DashboardRightSlideover
           open
-          size="xl"
+          size={drawer.kind === "player-sheet" ? "2xl" : "xl"}
           preventClose={drawerBusy}
           title={
             drawer.kind === "new-league"
@@ -307,7 +329,9 @@ export function DashboardArenaLayout({
                     ? "Agregar jugador"
                     : drawer.kind === "edit-player"
                       ? "Editar jugador"
-                      : "Registrar equipo"
+                      : drawer.kind === "player-sheet"
+                        ? "Ficha técnica"
+                        : "Registrar equipo"
           }
           description={
             drawer.kind === "new-league"
@@ -320,7 +344,9 @@ export function DashboardArenaLayout({
                     ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
                     : drawer.kind === "edit-player"
                       ? "Nombre, nacimiento, dorsal, posición y WhatsApp. Nueva foto o CURP opcional."
-                      : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
+                      : drawer.kind === "player-sheet"
+                        ? "Perfil visual con estadísticas acumuladas en esta liga (todas las temporadas con partidos registrados)."
+                        : "Elegí liga y categoría, datos del dirigente y contacto adicional. El escudo es opcional."
           }
           onClose={closeDrawer}
         >
@@ -343,6 +369,23 @@ export function DashboardArenaLayout({
               onClose={closeDrawer}
               onBusyChange={setDrawerBusy}
               onCategoryCreated={onLeagueCreated}
+            />
+          ) : drawer.kind === "player-sheet" ? (
+            <PlayerTechnicalSheetPanel
+              key={`sheet-${drawer.leagueId}-${drawer.teamId}-${drawer.playerId}`}
+              leagueId={drawer.leagueId}
+              teamId={drawer.teamId}
+              playerId={drawer.playerId}
+              onClose={closeDrawer}
+              onRequestEdit={() => {
+                setPlayerFormKey((k) => k + 1);
+                setDrawer({
+                  kind: "edit-player",
+                  leagueId: drawer.leagueId,
+                  teamId: drawer.teamId,
+                  playerId: drawer.playerId,
+                });
+              }}
             />
           ) : myLeagues.status === "ready" &&
             (drawer.kind === "register-team" || drawer.kind === "edit-team") ? (
