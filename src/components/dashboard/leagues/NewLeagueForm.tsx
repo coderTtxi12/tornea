@@ -267,7 +267,7 @@ export function NewLeagueForm({
         </fieldset>
 
         <label className="mt-4 block">
-          <span className="text-foreground-muted text-xs font-medium">Contacto principal</span>
+          <span className="text-foreground-muted text-xs font-medium">Nombre del contacto principal (Organizador de la liga)</span>
           <input
             type="text"
             name="contactName"
@@ -283,7 +283,7 @@ export function NewLeagueForm({
         </label>
 
         <div className="mt-4">
-          <span className="text-foreground-muted text-xs font-medium">Celular del contacto</span>
+          <span className="text-foreground-muted text-xs font-medium">Celular del organizador de la liga</span>
           <p className="text-foreground-subtle mt-0.5 text-[11px] leading-snug">
             Elige el país y escribe solo el número local (igual que en la solicitud de acceso).
           </p>
