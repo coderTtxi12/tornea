@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  forwardRef,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { DASHBOARD_NAV_ITEMS, type DashboardNavKey } from "./dashboard-nav-config";
 
@@ -34,23 +27,13 @@ type NavRailProps = {
   active: DashboardNavKey;
   onNavigate: (key: DashboardNavKey) => void;
   layout: "vertical" | "horizontal";
-  /** Solo vertical: recorta desde el final si el espacio es bajo. */
-  visibleCount?: number;
 };
 
-const DashboardNavRail = forwardRef<HTMLDivElement, NavRailProps>(function DashboardNavRail(
-  { active, onNavigate, layout, visibleCount = DASHBOARD_NAV_ITEMS.length },
-  ref,
-) {
+function DashboardNavRail({ active, onNavigate, layout }: NavRailProps) {
   const vertical = layout === "vertical";
-  const items = DASHBOARD_NAV_ITEMS.slice(
-    0,
-    Math.max(1, Math.min(visibleCount, DASHBOARD_NAV_ITEMS.length)),
-  );
 
   return (
     <nav
-      ref={ref}
       className={
         vertical
           ? "flex min-h-0 flex-col items-center gap-5 py-4 sm:gap-6 sm:py-5"
@@ -58,12 +41,13 @@ const DashboardNavRail = forwardRef<HTMLDivElement, NavRailProps>(function Dashb
       }
       aria-label="Navegación principal del dashboard"
     >
-      {items.map(({ key, label, symbol }) => {
+      {DASHBOARD_NAV_ITEMS.map(({ key, label, symbol }) => {
         const isActive = active === key;
         return (
           <button
             key={key}
             type="button"
+            data-dashboard-nav={key}
             title={label}
             aria-label={label}
             aria-current={isActive ? "page" : undefined}
@@ -86,92 +70,14 @@ const DashboardNavRail = forwardRef<HTMLDivElement, NavRailProps>(function Dashb
       })}
     </nav>
   );
-});
-
-DashboardNavRail.displayName = "DashboardNavRail";
-
-/** Altura vertical disponible para el rail: tope CSS (p. ej. 100dvh − márgenes), no solo el alto actual del contenido. Así al agrandar la ventana vuelven a mostrarse iconos que se habían ocultado. */
-function resolvePillVerticalBudgetPx(pill: HTMLElement): number {
-  const { maxHeight } = getComputedStyle(pill);
-  if (maxHeight && maxHeight !== "none") {
-    const capPx = Number.parseFloat(maxHeight);
-    if (Number.isFinite(capPx) && capPx > 0) {
-      return capPx;
-    }
-  }
-  return pill.clientHeight;
-}
-
-function useAdaptiveVerticalNavCount(
-  pillRef: RefObject<HTMLDivElement | null>,
-  navRef: RefObject<HTMLDivElement | null>,
-  active: DashboardNavKey,
-) {
-  const [visibleCount, setVisibleCount] = useState(DASHBOARD_NAV_ITEMS.length);
-
-  const recompute = useCallback(() => {
-    const pill = pillRef.current;
-    const nav = navRef.current;
-    if (!pill || !nav) return;
-
-    const innerH = resolvePillVerticalBudgetPx(pill);
-    const kids = nav.children;
-    if (kids.length === 0) return;
-
-    const btnEl = kids[0] as HTMLElement;
-    const cs = getComputedStyle(nav);
-    const gap = Number.parseFloat(cs.gap) || 0;
-    const navPadY =
-      (Number.parseFloat(cs.paddingTop) || 0) + (Number.parseFloat(cs.paddingBottom) || 0);
-    const button = btnEl.getBoundingClientRect().height;
-    const stride = button + gap;
-    const space = innerH - navPadY;
-
-    if (space < button || stride <= 0) {
-      setVisibleCount(1);
-      return;
-    }
-
-    let maxFit = Math.min(
-      DASHBOARD_NAV_ITEMS.length,
-      Math.max(1, Math.floor((space + gap) / stride)),
-    );
-
-    const activeIdx = DASHBOARD_NAV_ITEMS.findIndex((i) => i.key === active);
-    if (activeIdx >= 0 && activeIdx >= maxFit) {
-      maxFit = Math.min(DASHBOARD_NAV_ITEMS.length, activeIdx + 1);
-    }
-
-    setVisibleCount(maxFit);
-  }, [active]);
-
-  useLayoutEffect(() => {
-    const pill = pillRef.current;
-    if (!pill) return;
-
-    const ro = new ResizeObserver(() => {
-      requestAnimationFrame(() => recompute());
-    });
-    ro.observe(pill);
-
-    recompute();
-    window.addEventListener("resize", recompute);
-    window.visualViewport?.addEventListener("resize", recompute);
-
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", recompute);
-      window.visualViewport?.removeEventListener("resize", recompute);
-    };
-  }, [recompute]);
-
-  return visibleCount;
 }
 
 type DashboardNavSidebarProps = {
   active: DashboardNavKey;
   onNavigate: (key: DashboardNavKey) => void;
 };
+
+const SCROLL_STEP_PX = 120;
 
 function SidebarPill({
   active,
@@ -180,22 +86,88 @@ function SidebarPill({
   active: DashboardNavKey;
   onNavigate: (key: DashboardNavKey) => void;
 }) {
-  const pillRef = useRef<HTMLDivElement>(null);
-  const navRef = useRef<HTMLDivElement>(null);
-  const visibleCount = useAdaptiveVerticalNavCount(pillRef, navRef, active);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollHeight > el.clientHeight + 1;
+    setOverflow(hasOverflow);
+    setCanScrollUp(el.scrollTop > 2);
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(updateScrollState);
+    });
+    ro.observe(el);
+
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    updateScrollState();
+    window.addEventListener("resize", updateScrollState);
+    window.visualViewport?.addEventListener("resize", updateScrollState);
+
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", updateScrollState);
+      window.removeEventListener("resize", updateScrollState);
+      window.visualViewport?.removeEventListener("resize", updateScrollState);
+    };
+  }, [updateScrollState]);
+
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const target = root.querySelector<HTMLElement>(`[data-dashboard-nav="${active}"]`);
+    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    requestAnimationFrame(updateScrollState);
+  }, [active, updateScrollState]);
+
+  const scrollByDir = useCallback((dir: -1 | 1) => {
+    scrollRef.current?.scrollBy({ top: dir * SCROLL_STEP_PX, behavior: "smooth" });
+  }, []);
 
   return (
-    <div
-      ref={pillRef}
-      className="flex max-h-[calc(100dvh-2rem)] w-[3.25rem] flex-col items-center justify-center overflow-hidden rounded-full bg-brand-blue sm:w-[3.45rem] sm:max-h-[calc(100dvh-2.5rem)]"
-    >
-      <DashboardNavRail
-        ref={navRef}
-        active={active}
-        onNavigate={onNavigate}
-        layout="vertical"
-        visibleCount={visibleCount}
-      />
+    <div className="bg-brand-blue flex max-h-[calc(100dvh-2rem)] w-[3.25rem] flex-col overflow-hidden rounded-full sm:max-h-[calc(100dvh-2.5rem)] sm:w-[3.45rem]">
+      {overflow ? (
+        <button
+          type="button"
+          className="hover:bg-white/12 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-25 flex shrink-0 items-center justify-center py-1.5"
+          aria-label="Ver opciones anteriores del menú"
+          disabled={!canScrollUp}
+          onClick={() => scrollByDir(-1)}
+        >
+          <span className="material-symbols-rounded text-[22px] leading-none text-white/80 select-none">
+            expand_less
+          </span>
+        </button>
+      ) : null}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin]"
+      >
+        <DashboardNavRail active={active} onNavigate={onNavigate} layout="vertical" />
+      </div>
+      {overflow ? (
+        <button
+          type="button"
+          className="hover:bg-white/12 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-25 flex shrink-0 items-center justify-center py-1.5"
+          aria-label="Ver más opciones del menú"
+          disabled={!canScrollDown}
+          onClick={() => scrollByDir(1)}
+        >
+          <span className="material-symbols-rounded text-[22px] leading-none text-white/80 select-none">
+            expand_more
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }
