@@ -11,11 +11,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { createPortal } from "react-dom";
 
 import type { MyLeaguesTeamRow } from "@/components/dashboard/leagues/my-leagues-state";
-import {
-  floatCard,
-  MockActionButton,
-  MockBadge,
-} from "@/components/dashboard/views/dashboard-view-primitives";
+import { floatCard, MockBadge } from "@/components/dashboard/views/dashboard-view-primitives";
 
 /** Selector para cerrar el popover al hacer clic fuera (coincide con el atributo en el botón del encabezado). */
 export const TEAMS_FILTERABLE_TABLE_TRIGGER_ATTR = "data-teams-filterable-trigger";
@@ -154,9 +150,23 @@ export type TeamsFilterableTableHandle = {
   clearAllFilters: () => void;
 };
 
+/** Coincide con `OWNED_TEAMS_API_PAGE_LIMIT` en servidor. */
+const TEAMS_UI_PAGE_SIZE = 50;
+
 export type TeamsFilterableTableProps = {
   teamRows: readonly MyLeaguesTeamRow[];
+  /** Paginación servidor; `null` si ya no hay más bloques de hasta 50 filas. */
+  teamsNextCursor?: string | null;
+  onLoadMoreTeams?: () => Promise<{
+    ok: boolean;
+    teamCount: number;
+    hasMore: boolean;
+  } | null>;
+  loadingMoreTeams?: boolean;
   onEditTeam: (args: { leagueId: string; teamId: string }) => void;
+  /** Equipo cuya plantilla se muestra en el panel inferior. */
+  selectedTeamId?: string | null;
+  onShowTeamRoster: (team: MyLeaguesTeamRow) => void;
   /** Clases extra del contenedor con scroll (por defecto incluye `floatCard`). */
   wrapperClassName?: string;
   /** Se llama cuando «Borrar filtros» debe habilitarse: hay filtros de columna y/o el orden no es el predeterminado (Equipo A→Z). */
@@ -169,10 +179,21 @@ export type TeamsFilterableTableProps = {
  */
 export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, TeamsFilterableTableProps>(
   function TeamsFilterableTable(
-    { teamRows, onEditTeam, wrapperClassName, onHasActiveFiltersChange },
+    {
+      teamRows,
+      teamsNextCursor = null,
+      onLoadMoreTeams,
+      loadingMoreTeams = false,
+      onEditTeam,
+      selectedTeamId = null,
+      onShowTeamRoster,
+      wrapperClassName,
+      onHasActiveFiltersChange,
+    },
     ref,
   ) {
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
+  const [page, setPage] = useState(1);
   const [filterLeague, setFilterLeague] = useState<Set<string>>(() => new Set());
   const [filterCategory, setFilterCategory] = useState<Set<string>>(() => new Set());
   const [filterStatus, setFilterStatus] = useState<Set<string>>(() => new Set());
@@ -210,11 +231,16 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
         setFilterStatus(new Set());
         setFilterCode(new Set());
         setSort(DEFAULT_SORT);
+        setPage(1);
         closeFilter();
       },
     }),
     [closeFilter],
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterLeague, filterCategory, filterStatus, filterCode]);
 
   useEffect(() => {
     if (!openFilter) return;
@@ -286,6 +312,53 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
 
     return list;
   }, [teamRows, sort, filterLeague, filterCategory, filterStatus, filterCode]);
+
+  const filtersClear =
+    filterLeague.size === 0 &&
+    filterCategory.size === 0 &&
+    filterStatus.size === 0 &&
+    filterCode.size === 0;
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredSortedRows.length / TEAMS_UI_PAGE_SIZE));
+    setPage((p) => Math.min(p, maxPage));
+  }, [filteredSortedRows.length]);
+
+  const totalFiltered = filteredSortedRows.length;
+  const pageStart = (page - 1) * TEAMS_UI_PAGE_SIZE;
+  const visibleRows = filteredSortedRows.slice(pageStart, pageStart + TEAMS_UI_PAGE_SIZE);
+
+  const canGoNext =
+    totalFiltered > page * TEAMS_UI_PAGE_SIZE ||
+    (filtersClear && Boolean(teamsNextCursor && onLoadMoreTeams));
+
+  const goPrevPage = useCallback(() => {
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  const goNextPage = useCallback(async () => {
+    const targetPage = page + 1;
+    const requiredCount = targetPage * TEAMS_UI_PAGE_SIZE;
+
+    if (!filtersClear) {
+      if (totalFiltered > page * TEAMS_UI_PAGE_SIZE) {
+        setPage(targetPage);
+      }
+      return;
+    }
+
+    let count = totalFiltered;
+    while (count < requiredCount && onLoadMoreTeams) {
+      const r = await onLoadMoreTeams();
+      if (!r?.ok) break;
+      count = r.teamCount;
+      if (!r.hasMore) break;
+    }
+
+    if (count > (targetPage - 1) * TEAMS_UI_PAGE_SIZE) {
+      setPage(targetPage);
+    }
+  }, [page, filtersClear, totalFiltered, onLoadMoreTeams]);
 
   function toggleSortColumn(column: "name" | "players") {
     setSort((s) => {
@@ -541,12 +614,14 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
                 </td>
               </tr>
             ) : (
-              filteredSortedRows.map((t) => (
+              visibleRows.map((t) => (
                 <tr
                   key={t.id}
                   role="button"
                   tabIndex={0}
-                  className="hover:bg-surface-code/20 cursor-pointer transition-colors"
+                  className={`hover:bg-surface-code/20 cursor-pointer transition-colors ${
+                    selectedTeamId === t.id ? "bg-brand-teal/10" : ""
+                  }`}
                   onClick={() => onEditTeam({ leagueId: t.leagueId, teamId: t.id })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -578,15 +653,61 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                   >
-                    <MockActionButton variant="ghost" className="!p-0 !text-xs">
+                    <button
+                      type="button"
+                      className="text-foreground-muted hover:text-foreground border border-transparent px-2 py-1 text-xs font-semibold underline-offset-4 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShowTeamRoster(t);
+                      }}
+                    >
                       Plantilla y fichas
-                    </MockActionButton>
+                    </button>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+        {totalFiltered > 0 ? (
+          <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+            <p className="text-foreground-muted text-[13px] leading-snug">
+              Mostrando{" "}
+              <span className="text-foreground font-semibold tabular-nums">
+                {pageStart + 1}–{pageStart + visibleRows.length}
+              </span>{" "}
+              de{" "}
+              <span className="text-foreground font-semibold tabular-nums">
+                {totalFiltered}
+                {filtersClear && teamsNextCursor ? "+" : ""}
+              </span>
+              {filtersClear ? (
+                <span className="text-foreground-subtle"> ({TEAMS_UI_PAGE_SIZE} por página)</span>
+              ) : null}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || loadingMoreTeams}
+                className="border-border bg-background-muted/50 text-foreground cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => void goPrevPage()}
+              >
+                Anterior
+              </button>
+              <span className="text-foreground-muted tabular-nums text-xs font-semibold">
+                Pág. {page}
+              </span>
+              <button
+                type="button"
+                disabled={!canGoNext || loadingMoreTeams}
+                className="border-border bg-background-muted/50 text-foreground cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => void goNextPage()}
+              >
+                {loadingMoreTeams ? "Cargando…" : "Siguiente"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
       {renderFilterPortal()}
     </>

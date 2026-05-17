@@ -1,31 +1,93 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   TeamsFilterableTable,
   type TeamsFilterableTableHandle,
 } from "@/components/dashboard/tables/teams-filterable-table";
-import type { MyLeaguesTeamRow } from "../leagues/my-leagues-state";
+import { TeamRosterPanel } from "@/components/dashboard/tables/team-roster-panel";
+import type { MyLeaguesPlayerRow, MyLeaguesTeamRow } from "../leagues/my-leagues-state";
 import { DashboardViewHeader } from "./dashboard-view-primitives";
 
 export function DashboardTeamsView({
   teamRows,
+  teamsNextCursor,
+  onLoadMoreTeams,
+  teamsLoadingMore,
   onOpenRegisterTeamDrawer,
   onOpenEditTeamDrawer,
+  onOpenPlayerSheetDrawer,
 }: {
   teamRows: readonly MyLeaguesTeamRow[];
+  teamsNextCursor: string | null;
+  onLoadMoreTeams?: () => Promise<{
+    ok: boolean;
+    teamCount: number;
+    hasMore: boolean;
+  } | null>;
+  teamsLoadingMore?: boolean;
   onOpenRegisterTeamDrawer: () => void;
   onOpenEditTeamDrawer: (args: { leagueId: string; teamId: string }) => void;
+  onOpenPlayerSheetDrawer: (args: {
+    leagueId: string;
+    teamId: string;
+    playerId: string;
+  }) => void;
 }) {
   const tableRef = useRef<TeamsFilterableTableHandle>(null);
   const [canClearTable, setCanClearTable] = useState(false);
+
+  const [rosterTeam, setRosterTeam] = useState<MyLeaguesTeamRow | null>(null);
+  const [rosterRows, setRosterRows] = useState<MyLeaguesPlayerRow[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState<string | null>(null);
 
   useEffect(() => {
     if (teamRows.length === 0) {
       setCanClearTable(false);
     }
   }, [teamRows.length]);
+
+  const loadRoster = useCallback(async (team: MyLeaguesTeamRow) => {
+    if (rosterTeam?.id === team.id) {
+      setRosterTeam(null);
+      setRosterRows([]);
+      setRosterError(null);
+      return;
+    }
+
+    setRosterTeam(team);
+    setRosterRows([]);
+    setRosterError(null);
+    setRosterLoading(true);
+    try {
+      const res = await fetch(
+        `/api/leagues/${encodeURIComponent(team.leagueId)}/teams/${encodeURIComponent(team.id)}/roster`,
+      );
+      let data: { roster?: MyLeaguesPlayerRow[]; error?: string } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        /* ignore */
+      }
+      if (res.status === 401) {
+        window.location.href = "/";
+        return;
+      }
+      if (!res.ok) {
+        setRosterError(
+          typeof data.error === "string" ? data.error : "No se pudo cargar la plantilla.",
+        );
+        return;
+      }
+      setRosterRows(data.roster ?? []);
+    } catch {
+      setRosterError("Error de red al cargar la plantilla.");
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [rosterTeam?.id]);
 
   return (
     <>
@@ -62,12 +124,33 @@ export function DashboardTeamsView({
           Todavía no hay equipos registrados. Usa &quot;Registrar equipo&quot; para agregar el primero.
         </p>
       ) : (
-        <TeamsFilterableTable
-          ref={tableRef}
-          teamRows={teamRows}
-          onEditTeam={onOpenEditTeamDrawer}
-          onHasActiveFiltersChange={setCanClearTable}
-        />
+        <>
+          <TeamsFilterableTable
+            ref={tableRef}
+            teamRows={teamRows}
+            teamsNextCursor={teamsNextCursor}
+            onLoadMoreTeams={onLoadMoreTeams}
+            loadingMoreTeams={teamsLoadingMore}
+            onEditTeam={onOpenEditTeamDrawer}
+            selectedTeamId={rosterTeam?.id ?? null}
+            onShowTeamRoster={(team) => void loadRoster(team)}
+            onHasActiveFiltersChange={setCanClearTable}
+          />
+          {rosterTeam ? (
+            <TeamRosterPanel
+              team={rosterTeam}
+              roster={rosterRows}
+              loading={rosterLoading}
+              error={rosterError}
+              onClose={() => {
+                setRosterTeam(null);
+                setRosterRows([]);
+                setRosterError(null);
+              }}
+              onViewPlayerSheet={onOpenPlayerSheetDrawer}
+            />
+          ) : null}
+        </>
       )}
     </>
   );

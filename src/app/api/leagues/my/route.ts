@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { listOwnedLeaguesOrganizationCards } from "@/logic/leagues/list-owned-league-org-cards";
 import { listOwnedPlayerDashboardRowsPage } from "@/logic/leagues/list-owned-player-dashboard-rows";
-import { listOwnedTeamDashboardRows } from "@/logic/leagues/list-owned-team-dashboard-rows";
+import { listOwnedTeamDashboardRowsPage } from "@/logic/leagues/list-owned-team-dashboard-rows";
 import { listOwnedRefereeDashboardRows } from "@/logic/leagues/list-owned-referee-dashboard-rows";
 import { listOwnedVenueDashboardRows } from "@/logic/leagues/list-owned-venue-dashboard-rows";
 import { createClient } from "@/lib/supabase/server";
@@ -23,9 +23,9 @@ export async function GET() {
     }
 
     const appUser = await syncAppUserFromSupabaseAuthUser(user);
-    const [leagues, teams, playersPage, venues, referees] = await Promise.all([
+    const [leagues, teamsPage, playersPage, venues, referees] = await Promise.all([
       listOwnedLeaguesOrganizationCards(appUser.id),
-      listOwnedTeamDashboardRows(appUser.id),
+      listOwnedTeamDashboardRowsPage(appUser.id),
       listOwnedPlayerDashboardRowsPage(appUser.id),
       listOwnedVenueDashboardRows(appUser.id),
       listOwnedRefereeDashboardRows(appUser.id),
@@ -33,7 +33,8 @@ export async function GET() {
 
     return NextResponse.json({
       leagues,
-      teams,
+      teams: teamsPage.rows,
+      teamsNextCursor: teamsPage.nextCursor,
       players: playersPage.rows,
       playersNextCursor: playersPage.nextCursor,
       venues,

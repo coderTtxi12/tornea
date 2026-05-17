@@ -26,6 +26,7 @@ type LeaguesMyApiResponse = {
   venues?: MyLeaguesVenueRow[];
   referees?: MyLeaguesRefereeRow[];
   playersNextCursor?: string | null;
+  teamsNextCursor?: string | null;
 };
 
 export default function DashboardPage() {
@@ -36,6 +37,7 @@ export default function DashboardPage() {
     status: "loading",
   });
   const [playersLoadingMore, setPlayersLoadingMore] = useState(false);
+  const [teamsLoadingMore, setTeamsLoadingMore] = useState(false);
   const [refetchKey, setRefetchKey] = useState(0);
 
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function DashboardPage() {
           venues: data.venues ?? [],
           referees: data.referees ?? [],
           playersNextCursor: data.playersNextCursor ?? null,
+          teamsNextCursor: data.teamsNextCursor ?? null,
         });
       } catch {
         if (!cancelled) {
@@ -128,6 +131,54 @@ export default function DashboardPage() {
   const name = getDisplayName(user);
   const photo = getAvatarUrl(user);
   const initial = name.slice(0, 1).toUpperCase();
+
+  async function handleLoadMoreTeams(): Promise<{
+    ok: boolean;
+    teamCount: number;
+    hasMore: boolean;
+  } | null> {
+    if (myLeagues.status !== "ready" || teamsLoadingMore) return null;
+    const cursor = myLeagues.teamsNextCursor;
+    if (!cursor) return null;
+    setTeamsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/leagues/my/teams?cursor=${encodeURIComponent(cursor)}`,
+        { method: "GET" },
+      );
+      if (res.status === 401) {
+        router.replace("/");
+        return null;
+      }
+      if (!res.ok) return { ok: false, teamCount: myLeagues.teams.length, hasMore: true };
+      const body = (await res.json()) as {
+        teams?: MyLeaguesTeamRow[];
+        nextCursor?: string | null;
+      };
+      const chunk = body.teams ?? [];
+      const nextCursor = body.nextCursor ?? null;
+
+      let teamCount = myLeagues.teams.length;
+      let hasMore = nextCursor != null;
+
+      setMyLeagues((prev) => {
+        if (prev.status !== "ready") return prev;
+        const seen = new Set(prev.teams.map((t) => t.id));
+        const merged = chunk.filter((t) => !seen.has(t.id));
+        teamCount = prev.teams.length + merged.length;
+        hasMore = nextCursor != null;
+        return {
+          ...prev,
+          teams: [...prev.teams, ...merged],
+          teamsNextCursor: nextCursor,
+        };
+      });
+
+      return { ok: true, teamCount, hasMore };
+    } finally {
+      setTeamsLoadingMore(false);
+    }
+  }
 
   async function handleLoadMorePlayers(): Promise<{
     ok: boolean;
@@ -189,6 +240,8 @@ export default function DashboardPage() {
       onLeagueCreated={() => setRefetchKey((k) => k + 1)}
       onLoadMorePlayers={handleLoadMorePlayers}
       playersLoadingMore={playersLoadingMore}
+      onLoadMoreTeams={handleLoadMoreTeams}
+      teamsLoadingMore={teamsLoadingMore}
     />
   );
 }

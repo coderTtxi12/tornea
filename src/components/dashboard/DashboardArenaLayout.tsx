@@ -43,6 +43,12 @@ export type DashboardArenaLayoutProps = {
     hasMore: boolean;
   } | null>;
   playersLoadingMore?: boolean;
+  onLoadMoreTeams?: () => Promise<{
+    ok: boolean;
+    teamCount: number;
+    hasMore: boolean;
+  } | null>;
+  teamsLoadingMore?: boolean;
 };
 
 type RightDrawerState =
@@ -151,6 +157,8 @@ export function DashboardArenaLayout({
   onLeagueCreated,
   onLoadMorePlayers,
   playersLoadingMore,
+  onLoadMoreTeams,
+  teamsLoadingMore,
 }: DashboardArenaLayoutProps) {
   const [nav, setNav] = useState<DashboardNavKey>("home");
   const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
@@ -341,6 +349,9 @@ export function DashboardArenaLayout({
                     myLeagues.status === "ready" ? myLeagues.items : []
                   }
                   teamRows={myLeagues.status === "ready" ? myLeagues.teams : []}
+                  teamsNextCursor={
+                    myLeagues.status === "ready" ? myLeagues.teamsNextCursor : null
+                  }
                   playerRows={myLeagues.status === "ready" ? myLeagues.players : []}
                   playersNextCursor={
                     myLeagues.status === "ready" ? myLeagues.playersNextCursor : null
@@ -362,6 +373,8 @@ export function DashboardArenaLayout({
                   onOpenNewMatchDrawer={openNewMatchDrawer}
                   onOpenEditMatchDrawer={openEditMatchDrawer}
                   fixtureDataRefreshKey={railRefreshKey}
+                  onLoadMoreTeams={onLoadMoreTeams}
+                  teamsLoadingMore={teamsLoadingMore}
                 />
               )}
             </div>

@@ -27,6 +27,7 @@ export function DashboardViewSwitch({
   nav,
   leagueOrgCards,
   teamRows,
+  teamsNextCursor,
   playerRows,
   playersNextCursor,
   onLoadMorePlayers,
@@ -46,10 +47,13 @@ export function DashboardViewSwitch({
   onOpenNewMatchDrawer,
   onOpenEditMatchDrawer,
   fixtureDataRefreshKey = 0,
+  onLoadMoreTeams,
+  teamsLoadingMore,
 }: {
   nav: DashboardNavKey;
   leagueOrgCards: readonly MyLeaguesApiItem[];
   teamRows: readonly MyLeaguesTeamRow[];
+  teamsNextCursor: string | null;
   playerRows: readonly MyLeaguesPlayerRow[];
   playersNextCursor: string | null;
   onLoadMorePlayers?: () => Promise<{
@@ -81,6 +85,12 @@ export function DashboardViewSwitch({
   onOpenNewMatchDrawer: () => void;
   onOpenEditMatchDrawer: (row: MyLeaguesMatchRow) => void;
   fixtureDataRefreshKey?: number;
+  onLoadMoreTeams?: () => Promise<{
+    ok: boolean;
+    teamCount: number;
+    hasMore: boolean;
+  } | null>;
+  teamsLoadingMore?: boolean;
 }) {
   switch (nav) {
     case "home":
@@ -109,8 +119,12 @@ export function DashboardViewSwitch({
       return (
         <DashboardTeamsView
           teamRows={teamRows}
+          teamsNextCursor={teamsNextCursor}
+          onLoadMoreTeams={onLoadMoreTeams}
+          teamsLoadingMore={teamsLoadingMore}
           onOpenRegisterTeamDrawer={onOpenRegisterTeamDrawer}
           onOpenEditTeamDrawer={onOpenEditTeamDrawer}
+          onOpenPlayerSheetDrawer={onOpenPlayerSheetDrawer}
         />
       );
     case "players":

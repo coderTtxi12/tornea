@@ -134,6 +134,8 @@ export type DashboardMyLeaguesState =
       status: "ready";
       items: readonly MyLeaguesApiItem[];
       teams: readonly MyLeaguesTeamRow[];
+      /** Paginación servidor (máx. 50 equipos por carga); `null` si no hay más. */
+      teamsNextCursor: string | null;
       players: readonly MyLeaguesPlayerRow[];
       venues: readonly MyLeaguesVenueRow[];
       referees: readonly MyLeaguesRefereeRow[];
