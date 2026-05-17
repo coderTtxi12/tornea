@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { newLeagueTextFieldsSchema } from "@/components/dashboard/leagues/new-league-form-schema";
@@ -5,9 +6,13 @@ import {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
   LEAGUE_SHIELD_MIME_TYPES,
 } from "@/components/dashboard/leagues/league-shield-constraints";
+import { getDb } from "@/db/client";
+import { leagueCategories } from "@/db/schema";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import {
   createLeagueWithIdempotency,
+  type CreatedLeagueSummary,
   type NewLeagueCategoryInput,
 } from "@/logic/leagues/create-league-with-idempotency";
 import { deleteLeagueById } from "@/logic/leagues/delete-league-by-id";
@@ -85,6 +90,57 @@ function readIdempotencyKey(request: Request): string | null {
 function readFormString(form: FormData, name: string): string {
   const v = form.get(name);
   return typeof v === "string" ? v : "";
+}
+
+async function recordLeagueCreateAudit(
+  appUserId: string,
+  league: CreatedLeagueSummary,
+  initialCategoryCount: number,
+  shieldUploaded: boolean,
+): Promise<void> {
+  await recordAppAuditLog(
+    {
+      actorUserId: appUserId,
+      action: "create",
+      entityType: AppAuditEntityType.league,
+      entityId: league.id,
+      leagueId: league.id,
+      summary: `Liga creada: ${league.name}`,
+      metadata: {
+        slug: league.slug,
+        initialCategoryCount,
+        shieldUploaded,
+      },
+    },
+    { swallowErrors: true },
+  );
+
+  if (initialCategoryCount === 0) return;
+
+  const db = getDb();
+  const categories = await db
+    .select({
+      id: leagueCategories.id,
+      name: leagueCategories.name,
+      code: leagueCategories.code,
+    })
+    .from(leagueCategories)
+    .where(eq(leagueCategories.leagueId, league.id));
+
+  for (const category of categories) {
+    await recordAppAuditLog(
+      {
+        actorUserId: appUserId,
+        action: "create",
+        entityType: AppAuditEntityType.leagueCategory,
+        entityId: category.id,
+        leagueId: league.id,
+        summary: `Categoría creada: ${category.name}`,
+        metadata: { code: category.code, source: "league_create" },
+      },
+      { swallowErrors: true },
+    );
+  }
 }
 
 /**
@@ -192,6 +248,15 @@ export async function POST(request: Request) {
           { status: 503 },
         );
       }
+    }
+
+    if (!replay) {
+      await recordLeagueCreateAudit(
+        appUser.id,
+        league,
+        initialCategories.length,
+        Boolean(shieldBytes && shieldContentType),
+      );
     }
 
     return NextResponse.json(

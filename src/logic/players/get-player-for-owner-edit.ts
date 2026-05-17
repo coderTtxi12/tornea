@@ -11,6 +11,8 @@ export type PlayerEditPayload = {
     id: string;
     leagueId: string;
     fullName: string;
+    /** CURP en `players.doc_id`. */
+    docId: string | null;
     /** `YYYY-MM-DD` */
     birthDate: string;
     metadata: unknown;
@@ -77,6 +79,7 @@ export async function getPlayerForOwnerEdit(
       playerId: players.id,
       leagueId: players.leagueId,
       fullName: players.fullName,
+      docId: players.docId,
       birthDate: players.birthDate,
       metadata: players.metadata,
       rosterId: teamRosters.id,
@@ -116,6 +119,7 @@ export async function getPlayerForOwnerEdit(
       id: row.playerId,
       leagueId: row.leagueId,
       fullName: row.fullName,
+      docId: row.docId?.trim() ? row.docId.trim() : null,
       birthDate: birth,
       metadata: row.metadata,
     },

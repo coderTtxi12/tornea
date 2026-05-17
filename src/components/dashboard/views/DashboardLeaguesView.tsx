@@ -109,12 +109,18 @@ type DashboardLeaguesViewProps = {
   leagues: readonly MyLeaguesApiItem[];
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
+  onOpenEditCategoryDrawer: (args: {
+    leagueId: string;
+    leagueName: string;
+    categoryId: string;
+  }) => void;
 };
 
 export function DashboardLeaguesView({
   leagues,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
+  onOpenEditCategoryDrawer,
 }: DashboardLeaguesViewProps) {
   /** `null` = usar la primera liga de la lista (orden de la API / DB). */
   const [pickedLeagueId, setPickedLeagueId] = useState<string | null>(null);
@@ -335,6 +341,20 @@ export function DashboardLeaguesView({
                           ) : null}
                           <CategoryDetailRow label="Fecha de creación" value={formatDateEsShort(c.createdAt)} />
                         </dl>
+                        <button
+                          type="button"
+                          className="border-border bg-background-muted/50 hover:bg-surface-code/40 w-full cursor-pointer rounded-full border px-4 py-2 text-xs font-semibold transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenEditCategoryDrawer({
+                              leagueId: selectedLeague.id,
+                              leagueName: selectedLeague.name,
+                              categoryId: c.id,
+                            });
+                          }}
+                        >
+                          Editar categoría
+                        </button>
                       </article>
                     );
                   })}

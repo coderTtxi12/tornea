@@ -13,6 +13,7 @@ type NewLeagueCategoryFormProps = {
   onClose: () => void;
   onCategoryCreated?: () => void;
   onBusyChange?: (busy: boolean) => void;
+  editTarget?: { leagueId: string; categoryId: string } | null;
 };
 
 function parseOptionalBirthYear(raw: string): number | null | "invalid" {
@@ -37,8 +38,16 @@ export function NewLeagueCategoryForm({
   onClose,
   onCategoryCreated,
   onBusyChange,
+  editTarget = null,
 }: NewLeagueCategoryFormProps) {
+  const isEdit = Boolean(editTarget);
   const idempotencyKeyRef = useRef<string | null>(null);
+
+  const [codeReadOnly, setCodeReadOnly] = useState("");
+  const [editLoadState, setEditLoadState] = useState<"idle" | "loading" | "ready" | "error">(
+    () => (isEdit ? "loading" : "ready"),
+  );
+  const [editLoadError, setEditLoadError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [gender, setGender] = useState<(typeof leagueCategoryGenderOptions)[number]["value"]>(
@@ -51,6 +60,75 @@ export function NewLeagueCategoryForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const fetchEditLeagueId = editTarget?.leagueId ?? null;
+  const fetchEditCategoryId = editTarget?.categoryId ?? null;
+
+  useEffect(() => {
+    if (!fetchEditLeagueId || !fetchEditCategoryId) {
+      return;
+    }
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEditLoadState("loading");
+      setEditLoadError(null);
+
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/leagues/${encodeURIComponent(fetchEditLeagueId)}/categories/${encodeURIComponent(fetchEditCategoryId)}`,
+          );
+          let data: {
+            category?: {
+              code: string;
+              name: string;
+              gender: (typeof leagueCategoryGenderOptions)[number]["value"];
+              birthYearMin: number | null;
+              birthYearMax: number | null;
+              minTeamsToStart: number | null;
+            };
+            error?: string;
+          } = {};
+          try {
+            data = (await res.json()) as typeof data;
+          } catch {
+            /* ignore */
+          }
+          if (cancelled) return;
+          if (res.status === 401) {
+            window.location.href = "/";
+            return;
+          }
+          if (!res.ok || !data.category) {
+            setEditLoadError(
+              typeof data.error === "string" ? data.error : "No se pudo cargar la categoría.",
+            );
+            setEditLoadState("error");
+            return;
+          }
+          const c = data.category;
+          setCodeReadOnly(c.code);
+          setName(c.name);
+          setGender(c.gender);
+          setBirthYearMinStr(c.birthYearMin == null ? "" : String(c.birthYearMin));
+          setBirthYearMaxStr(c.birthYearMax == null ? "" : String(c.birthYearMax));
+          setMinTeamsStr(c.minTeamsToStart == null ? "" : String(c.minTeamsToStart));
+          setEditLoadState("ready");
+        } catch {
+          if (!cancelled) {
+            setEditLoadError("Error de red al cargar la categoría.");
+            setEditLoadState("error");
+          }
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchEditLeagueId, fetchEditCategoryId]);
 
   useEffect(() => {
     onBusyChange?.(submitting);
@@ -120,19 +198,24 @@ export function NewLeagueCategoryForm({
 
     setSubmitting(true);
     try {
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current =
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const url = isEdit
+        ? `/api/leagues/${encodeURIComponent(fetchEditLeagueId!)}/categories/${encodeURIComponent(fetchEditCategoryId!)}`
+        : `/api/leagues/${encodeURIComponent(leagueId)}/categories`;
+
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (!isEdit) {
+        if (!idempotencyKeyRef.current) {
+          idempotencyKeyRef.current =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+        headers["Idempotency-Key"] = idempotencyKeyRef.current;
       }
 
-      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/categories`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKeyRef.current,
-        },
+      const res = await fetch(url, {
+        method: isEdit ? "PATCH" : "POST",
+        headers,
         body: JSON.stringify(parsed.data),
       });
 
@@ -155,26 +238,71 @@ export function NewLeagueCategoryForm({
         setSubmitError(
           typeof data.error === "string"
             ? data.error
-            : "No se pudo crear la categoría. Intentá de nuevo.",
+            : isEdit
+              ? "No se pudo actualizar la categoría. Intentá de nuevo."
+              : "No se pudo crear la categoría. Intentá de nuevo.",
         );
         return;
       }
 
       onCategoryCreated?.();
-      idempotencyKeyRef.current = null;
-      resetForm();
+      if (!isEdit) {
+        idempotencyKeyRef.current = null;
+        resetForm();
+      }
       onClose();
     } finally {
       setSubmitting(false);
     }
   }
 
+  if (isEdit && editLoadState === "loading") {
+    return (
+      <div className="flex min-h-[14rem] flex-col items-center justify-center gap-3">
+        <div
+          className="border-brand-teal size-10 animate-spin rounded-full border-2 border-t-transparent"
+          aria-label="Cargando"
+          role="status"
+        />
+        <p className="text-foreground-muted text-sm">Cargando categoría…</p>
+      </div>
+    );
+  }
+
+  if (isEdit && editLoadState === "error") {
+    return (
+      <div className="w-full space-y-4">
+        <p className="text-brand-purple text-sm">{editLoadError ?? "No se pudo cargar."}</p>
+        <button
+          type="button"
+          className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2 text-sm font-medium"
+          onClick={onClose}
+        >
+          Cerrar
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
-        Liga: <span className="text-foreground font-medium">{leagueName}</span>. El{" "}
-        <code className="text-foreground-muted text-xs">code</code> se genera en el servidor (único
-        por liga). Reintentos con la misma clave no duplican la categoría.
+        Liga: <span className="text-foreground font-medium">{leagueName}</span>.
+        {isEdit ? (
+          <>
+            {" "}
+            El <code className="text-foreground-muted text-xs">code</code> (
+            <span className="font-mono">{codeReadOnly || "…"}</span>) no se puede cambiar: otras
+            tablas referencian la categoría por{" "}
+            <code className="text-foreground-muted text-xs">id</code>.
+          </>
+        ) : (
+          <>
+            {" "}
+            El <code className="text-foreground-muted text-xs">code</code> se genera en el servidor
+            (único por liga). Reintentos con la misma clave no duplican la categoría.
+          </>
+        )}
       </p>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -346,7 +474,11 @@ export function NewLeagueCategoryForm({
             className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
             disabled={submitting}
           >
-            {submitting ? "Guardando…" : "Guardar categoría"}
+            {submitting
+              ? "Guardando…"
+              : isEdit
+                ? "Guardar cambios"
+                : "Guardar categoría"}
           </button>
         </div>
       </form>

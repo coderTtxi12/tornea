@@ -59,6 +59,8 @@ export type PlayerDashboardSheetPayload = {
     curpDownloadUrl: string | null;
     /** Nombre sugerido al descargar CURP. */
     curpFileName: string | null;
+    /** CURP capturada en `players.doc_id`. */
+    docId: string | null;
   };
   context: {
     leagueId: string;
@@ -352,6 +354,7 @@ export async function getPlayerDashboardSheet(
       curpUploaded,
       curpDownloadUrl,
       curpFileName: curpSummary.fileName,
+      docId: base.player.docId,
     },
     context: {
       leagueId,

@@ -49,6 +49,7 @@ type RightDrawerState =
   | { kind: "closed" }
   | { kind: "new-league" }
   | { kind: "new-category"; leagueId: string; leagueName: string }
+  | { kind: "edit-category"; leagueId: string; leagueName: string; categoryId: string }
   | { kind: "new-venue" }
   | { kind: "edit-venue"; leagueId: string; venueId: string }
   | { kind: "new-referee" }
@@ -175,6 +176,14 @@ export function DashboardArenaLayout({
     setCategoryFormKey((k) => k + 1);
     setDrawer({ kind: "new-category", ...args });
   }, []);
+
+  const openEditCategoryDrawer = useCallback(
+    (args: { leagueId: string; leagueName: string; categoryId: string }) => {
+      setCategoryFormKey((k) => k + 1);
+      setDrawer({ kind: "edit-category", ...args });
+    },
+    [],
+  );
 
   const openNewVenueDrawer = useCallback(() => {
     setVenueFormKey((k) => k + 1);
@@ -340,6 +349,7 @@ export function DashboardArenaLayout({
                   playersLoadingMore={playersLoadingMore}
                   onOpenNewLeagueDrawer={openNewLeagueDrawer}
                   onOpenNewCategoryDrawer={openNewCategoryDrawer}
+                  onOpenEditCategoryDrawer={openEditCategoryDrawer}
                   onOpenNewVenueDrawer={openNewVenueDrawer}
                   onOpenEditVenueDrawer={openEditVenueDrawer}
                   venueRows={myLeagues.status === "ready" ? myLeagues.venues : []}
@@ -371,6 +381,8 @@ export function DashboardArenaLayout({
               ? "Nueva liga"
               : drawer.kind === "new-category"
                 ? "Nueva categoría"
+                : drawer.kind === "edit-category"
+                  ? "Editar categoría"
                 : drawer.kind === "new-match"
                   ? "Nuevo partido"
                   : drawer.kind === "edit-match"
@@ -396,6 +408,8 @@ export function DashboardArenaLayout({
               ? "Completá los datos; el escudo es opcional. Se usa Idempotency-Key para evitar duplicados si la red falla."
               : drawer.kind === "new-category"
                 ? "La categoría queda en league_categories y se ordena al final (sort_order)."
+                : drawer.kind === "edit-category"
+                  ? "Nombre, género y reglas deportivas. El code y la liga no se modifican."
                 : drawer.kind === "new-match"
                   ? "Alta en matches: temporada, equipos inscritos (season_teams), fecha/hora y cancha opcional."
                   : drawer.kind === "edit-match"
@@ -403,9 +417,9 @@ export function DashboardArenaLayout({
                     : drawer.kind === "edit-team"
                   ? "Modificá categoría, contactos, estado o escudo. La liga no se cambia desde acá."
                   : drawer.kind === "register-player"
-                    ? "Selecciona el equipo y captura los datos. La foto, la CURP y el WhatsApp son opcionales."
+                    ? "Selecciona el equipo y captura los datos. CURP (texto), escaneo, foto y WhatsApp son opcionales."
                     : drawer.kind === "edit-player"
-                      ? "Nombre, nacimiento, dorsal, posición y WhatsApp. Nueva foto o CURP opcional."
+                      ? "Nombre, nacimiento, dorsal, posición, CURP y WhatsApp. Nueva foto o escaneo de CURP opcional."
                       : drawer.kind === "player-sheet"
                         ? "Perfil visual con estadísticas acumuladas en esta liga (todas las temporadas con partidos registrados)."
                         : drawer.kind === "new-venue"
@@ -429,11 +443,20 @@ export function DashboardArenaLayout({
                 closeDrawer();
               }}
             />
-          ) : drawer.kind === "new-category" ? (
+          ) : drawer.kind === "new-category" || drawer.kind === "edit-category" ? (
             <NewLeagueCategoryForm
-              key={`${drawer.leagueId}-${categoryFormKey}`}
+              key={
+                drawer.kind === "edit-category"
+                  ? `edit-category-${drawer.leagueId}-${drawer.categoryId}-${categoryFormKey}`
+                  : `${drawer.leagueId}-${categoryFormKey}`
+              }
               leagueId={drawer.leagueId}
               leagueName={drawer.leagueName}
+              editTarget={
+                drawer.kind === "edit-category"
+                  ? { leagueId: drawer.leagueId, categoryId: drawer.categoryId }
+                  : null
+              }
               onClose={closeDrawer}
               onBusyChange={setDrawerBusy}
               onCategoryCreated={onLeagueCreated}

@@ -7,6 +7,11 @@ import {
   flagEmojiFromIso2,
   getCountryDialOptions,
 } from "@/lib/phone/country-dial-options";
+import {
+  CURP_FORMAT_EXAMPLE,
+  CURP_LENGTH,
+  normalizeCurpInput,
+} from "@/logic/players/curp";
 
 import {
   PLAYER_CURP_ACCEPT_ATTR,
@@ -113,7 +118,7 @@ export function NewPlayerForm({
   const countryDialOptions = useMemo(() => getCountryDialOptions(), []);
   const birthDateMax = useMemo(() => localIsoDateString(), []);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const curpInputRef = useRef<HTMLInputElement>(null);
+  const curpFileInputRef = useRef<HTMLInputElement>(null);
 
   const initialTeamId = useMemo<string>(() => {
     if (editTarget?.teamId && teamRows.some((t) => t.id === editTarget.teamId)) {
@@ -153,8 +158,9 @@ export function NewPlayerForm({
   const photoPreviewUrlRef = useRef<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
 
-  const [curp, setCurp] = useState<File | null>(null);
-  const [curpError, setCurpError] = useState<string | null>(null);
+  const [curpText, setCurpText] = useState("");
+  const [curpFile, setCurpFile] = useState<File | null>(null);
+  const [curpFileError, setCurpFileError] = useState<string | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -213,11 +219,12 @@ export function NewPlayerForm({
       setServerExistingPhotoUrl(null);
       setPhoto(null);
       replacePhotoPreview(null);
-      setCurp(null);
+      setCurpText("");
+      setCurpFile(null);
       setPhotoError(null);
-      setCurpError(null);
+      setCurpFileError(null);
       if (photoInputRef.current) photoInputRef.current.value = "";
-      if (curpInputRef.current) curpInputRef.current.value = "";
+      if (curpFileInputRef.current) curpFileInputRef.current.value = "";
 
       setTeamId(fetchEditTeamId);
       const rowTeam = teamRowsRef.current.find((t) => t.id === fetchEditTeamId);
@@ -233,6 +240,7 @@ export function NewPlayerForm({
         let data: {
           player?: {
             fullName: string;
+            docId?: string | null;
             birthDate: string;
             whatsappCountryIso: string;
             whatsappPhoneNational: string;
@@ -259,6 +267,7 @@ export function NewPlayerForm({
           return;
         }
         setFullName(data.player.fullName);
+        setCurpText(data.player.docId ?? "");
         setBirthDate(data.player.birthDate);
         setShirtNumber(data.roster.shirtNumber == null ? "" : String(data.roster.shirtNumber));
         const pos = data.roster.position?.trim() ?? "";
@@ -391,25 +400,25 @@ export function NewPlayerForm({
     replacePhotoPreview(URL.createObjectURL(file));
   }
 
-  function onCurpChange(file: File | null) {
-    setCurpError(null);
+  function onCurpFileChange(file: File | null) {
+    setCurpFileError(null);
     if (!file) {
-      setCurp(null);
+      setCurpFile(null);
       return;
     }
     if (!PLAYER_CURP_MIME_TYPES.has(file.type)) {
-      setCurp(null);
-      setCurpError("Usa PDF, JPG, PNG o WebP.");
+      setCurpFile(null);
+      setCurpFileError("Usa PDF, JPG, PNG o WebP.");
       return;
     }
     if (file.size > PLAYER_CURP_MAX_FILE_BYTES) {
-      setCurp(null);
-      setCurpError(
+      setCurpFile(null);
+      setCurpFileError(
         `El archivo supera ${Math.round(PLAYER_CURP_MAX_FILE_BYTES / (1024 * 1024))} MB.`,
       );
       return;
     }
-    setCurp(file);
+    setCurpFile(file);
   }
 
   function resetForm() {
@@ -428,15 +437,16 @@ export function NewPlayerForm({
     setWhatsappPhone("");
     setPhoto(null);
     replacePhotoPreview(null);
-    setCurp(null);
+    setCurpText("");
+    setCurpFile(null);
     setPhotoError(null);
-    setCurpError(null);
+    setCurpFileError(null);
     setFieldErrors({});
     setSubmitError(null);
     setSubmitting(false);
     setServerExistingPhotoUrl(null);
     if (photoInputRef.current) photoInputRef.current.value = "";
-    if (curpInputRef.current) curpInputRef.current.value = "";
+    if (curpFileInputRef.current) curpFileInputRef.current.value = "";
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -475,10 +485,11 @@ export function NewPlayerForm({
     fd.set("position", positionToSubmit);
     fd.set("whatsappCountryIso", whatsappCountryIso);
     fd.set("whatsappPhoneNational", whatsappPhone);
+    fd.set("docId", curpText.trim());
     if (photo) {
       fd.set("photo", photo);
     }
-    if (curp) fd.set("curp", curp);
+    if (curpFile) fd.set("curp", curpFile);
 
     try {
       const url = isEdit
@@ -588,8 +599,8 @@ export function NewPlayerForm({
             El jugador se guarda en <span className="text-foreground font-medium">players</span>{" "}
             (nombre, fecha de nacimiento) y se inscribe en la plantilla del equipo (
             <span className="text-foreground font-medium">team_rosters</span>) en la temporada
-            objetivo de la liga. La foto y la CURP se suben aparte al bucket de Storage si las
-            adjuntás.
+            objetivo de la liga. La CURP (texto) se guarda en el expediente del jugador; la foto y
+            el escaneo de CURP se suben aparte al bucket de Storage si los adjuntás.
           </>
         )}
       </p>
@@ -914,28 +925,53 @@ export function NewPlayerForm({
           ) : null}
         </fieldset>
 
-        <fieldset>
+        <label className="mt-4 block">
+          <span className="text-foreground-muted text-xs font-medium">CURP (opcional)</span>
+          <input
+            type="text"
+            name="docId"
+            value={curpText}
+            onChange={(e) => {
+              const next = normalizeCurpInput(e.target.value).slice(0, CURP_LENGTH);
+              setCurpText(next);
+            }}
+            placeholder={`${CURP_LENGTH} caracteres alfanuméricos`}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={submitting}
+            className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 mt-1 w-full rounded-brand-md border px-3 py-2 font-mono text-sm tracking-wide uppercase outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-invalid={!!fieldErrors.docId}
+          />
+          <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
+            Ejemplo: {CURP_FORMAT_EXAMPLE}
+          </p>
+          {fieldErrors.docId ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.docId}</span>
+          ) : null}
+        </label>
+
+        <fieldset className="mt-4">
           <legend className="text-foreground-muted text-xs font-medium">
-            CURP (opcional)
+            Escaneo de CURP (opcional)
           </legend>
           <input
-            ref={curpInputRef}
+            ref={curpFileInputRef}
             type="file"
             accept={PLAYER_CURP_ACCEPT_ATTR}
             disabled={submitting}
             className="border-border bg-background-muted/30 mt-1 w-full cursor-pointer rounded-brand-md border border-dashed px-2 py-2 text-xs file:mr-2 file:rounded-md file:border-0 file:bg-brand-blue file:px-2 file:py-1 file:text-xs file:text-white"
-            onChange={(e) => onCurpChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => onCurpFileChange(e.target.files?.[0] ?? null)}
           />
           <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
             PDF, JPG, PNG o WebP · máx.{" "}
             {Math.round(PLAYER_CURP_MAX_FILE_BYTES / (1024 * 1024))} MB
           </p>
-          {curpError ? (
-            <span className="text-brand-purple mt-1 block text-xs">{curpError}</span>
+          {curpFileError ? (
+            <span className="text-brand-purple mt-1 block text-xs">{curpFileError}</span>
           ) : null}
-          {curp ? (
+          {curpFile ? (
             <p className="text-foreground-muted mt-1 truncate text-[11px]">
-              Archivo: <span className="text-foreground font-medium">{curp.name}</span>
+              Archivo: <span className="text-foreground font-medium">{curpFile.name}</span>
             </p>
           ) : null}
         </fieldset>

@@ -12,6 +12,7 @@ type SheetApiPayload = {
     curpUploaded: boolean;
     curpDownloadUrl: string | null;
     curpFileName: string | null;
+    docId: string | null;
   };
   context: {
     leagueId: string;
@@ -238,6 +239,10 @@ export function PlayerTechnicalSheetPanel({
           curpFileName:
             typeof raw.player.curpFileName === "string" && raw.player.curpFileName.trim()
               ? raw.player.curpFileName.trim()
+              : null,
+          docId:
+            typeof raw.player.docId === "string" && raw.player.docId.trim()
+              ? raw.player.docId.trim()
               : null,
         },
         context: {
@@ -480,14 +485,17 @@ export function PlayerTechnicalSheetPanel({
             <dt className="text-foreground-muted text-xs font-semibold">Edad</dt>
             <dd className="text-right text-sm font-medium">{age != null ? `${age} años` : "—"}</dd>
           </div>
+          <div className="flex justify-between gap-4 rounded-lg bg-background/60 px-3 py-2 sm:col-span-2">
+            <dt className="text-foreground-muted text-xs font-semibold">CURP</dt>
+            <dd className="text-right font-mono text-sm font-medium tracking-wide break-all">
+              {player.docId ?? "—"}
+            </dd>
+          </div>
           <div className="flex justify-between gap-4 rounded-lg bg-background/60 px-3 py-2">
-            <dt className="text-foreground-muted max-w-[45%] text-xs font-semibold leading-snug">
-              Identificación{" "}
-              <span className="text-foreground-subtle font-normal"></span>
-            </dt>
+            <dt className="text-foreground-muted text-xs font-semibold">Documento CURP</dt>
             <dd className="text-right text-sm font-semibold tabular-nums">
               {player.curpUploaded ? (
-                <span className="text-amber-500" title="Documento CURP cargado" aria-label="Sí">
+                <span className="text-amber-500" title="Archivo CURP cargado" aria-label="Sí">
                   ✓
                 </span>
               ) : (

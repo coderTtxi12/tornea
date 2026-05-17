@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { newLeagueCategoryJsonSchema } from "@/components/dashboard/leagues/new-league-category-form-schema";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { createLeagueCategoryWithIdempotency } from "@/logic/leagues/create-league-category-with-idempotency";
 import { createClient } from "@/lib/supabase/server";
@@ -83,6 +84,24 @@ export async function POST(
       idempotencyKey,
       payload,
     );
+
+    if (!result.replay) {
+      await recordAppAuditLog(
+        {
+          actorUserId: appUser.id,
+          action: "create",
+          entityType: AppAuditEntityType.leagueCategory,
+          entityId: result.category.id,
+          leagueId,
+          summary: `Categoría creada: ${result.category.name}`,
+          metadata: {
+            code: result.category.code,
+            gender: result.category.gender,
+          },
+        },
+        { swallowErrors: true },
+      );
+    }
 
     return NextResponse.json(
       { category: result.category, replay: result.replay },

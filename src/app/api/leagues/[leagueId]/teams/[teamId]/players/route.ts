@@ -9,6 +9,7 @@ import {
 import {
   buildOptionalPlayerWhatsappE164,
   newPlayerFormFieldsSchema,
+  parseOptionalDocIdCurp,
   parseOptionalShirtNumber,
 } from "@/components/dashboard/leagues/new-player-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
@@ -85,6 +86,7 @@ export async function POST(
       position: readFormString(form, "position"),
       whatsappCountryIso: readFormString(form, "whatsappCountryIso") || "MX",
       whatsappPhoneNational: readFormString(form, "whatsappPhoneNational"),
+      docId: readFormString(form, "docId"),
     });
     if (!parsed.success) {
       const fields: Record<string, string> = {};
@@ -119,6 +121,7 @@ export async function POST(
         shirtNumber: parseOptionalShirtNumber(data.shirtNumber),
         position: data.position ?? null,
         whatsappE164,
+        docId: parseOptionalDocIdCurp(data.docId),
       });
     } catch (e) {
       if (e instanceof Error && e.message === "NOT_FOUND") {

@@ -33,6 +33,7 @@ export function DashboardViewSwitch({
   playersLoadingMore,
   onOpenNewLeagueDrawer,
   onOpenNewCategoryDrawer,
+  onOpenEditCategoryDrawer,
   onOpenNewVenueDrawer,
   onOpenEditVenueDrawer,
   venueRows,
@@ -59,6 +60,11 @@ export function DashboardViewSwitch({
   playersLoadingMore?: boolean;
   onOpenNewLeagueDrawer: () => void;
   onOpenNewCategoryDrawer: (args: { leagueId: string; leagueName: string }) => void;
+  onOpenEditCategoryDrawer: (args: {
+    leagueId: string;
+    leagueName: string;
+    categoryId: string;
+  }) => void;
   onOpenNewVenueDrawer: () => void;
   onOpenEditVenueDrawer: (args: { leagueId: string; venueId: string }) => void;
   venueRows: readonly MyLeaguesVenueRow[];
@@ -85,6 +91,7 @@ export function DashboardViewSwitch({
           leagues={leagueOrgCards}
           onOpenNewLeagueDrawer={onOpenNewLeagueDrawer}
           onOpenNewCategoryDrawer={onOpenNewCategoryDrawer}
+          onOpenEditCategoryDrawer={onOpenEditCategoryDrawer}
         />
       );
     case "fixture":

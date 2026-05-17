@@ -24,6 +24,8 @@ export type NewPlayerInsert = {
   position: string | null;
   /** Opcional, queda en `players.metadata.whatsappE164`. */
   whatsappE164: string | null;
+  /** CURP normalizada (18 caracteres) o `null`. Columna `players.doc_id`. */
+  docId: string | null;
 };
 
 export type CreatedPlayer = {
@@ -92,6 +94,7 @@ export async function createPlayerInTeam(
       .values({
         leagueId: args.leagueId,
         fullName: args.fullName.trim(),
+        docId: args.docId,
         birthDate: args.birthDate,
         metadata: baseMetadata,
       })

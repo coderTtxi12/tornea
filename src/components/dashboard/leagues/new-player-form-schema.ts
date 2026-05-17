@@ -1,11 +1,16 @@
 import { z } from "zod";
 
 import { combineCountryDialAndNationalToE164 } from "@/logic/access-request/whatsapp";
+import {
+  invalidCurpMessage,
+  isValidMexicanCurp,
+  normalizeCurpInput,
+} from "@/logic/players/curp";
 import { findDialOptionByIso2 } from "@/lib/phone/country-dial-options";
 
 /**
- * Validación de campos de texto del formulario "Agregar jugador". Los archivos
- * (foto y CURP) se validan aparte (tamaño / MIME) y son opcionales.
+ * Validación de campos de texto del formulario "Agregar jugador". La CURP (texto)
+ * usa `logic/players/curp`; el escaneo (foto de CURP) y la foto del jugador se validan aparte.
  *
  * Notas:
  * - WhatsApp es opcional; si lo tocás, el número local debe ser válido para el país.
@@ -76,9 +81,23 @@ export const newPlayerFormFieldsSchema = z
     /** Vacío = sin WhatsApp. */
     whatsappCountryIso: z.string().min(2).max(2),
     whatsappPhoneNational: z.string().trim(),
+    /** Vacío = sin CURP. Si trae texto: 18 caracteres alfanuméricos → `players.doc_id`. */
+    docId: z.string().trim().max(24).optional().default(""),
   })
   .superRefine((data, ctx) => {
     addBirthDateFieldIssues(data.birthDate, ctx);
+
+    const curpRaw = data.docId.trim();
+    if (curpRaw.length > 0) {
+      const normalized = normalizeCurpInput(curpRaw);
+      if (!isValidMexicanCurp(normalized)) {
+        ctx.addIssue({
+          code: "custom",
+          message: invalidCurpMessage(),
+          path: ["docId"],
+        });
+      }
+    }
 
     const numRaw = data.shirtNumber.replace(/\D/g, "");
     if (data.shirtNumber.trim().length > 0 && numRaw.length === 0) {
@@ -153,4 +172,11 @@ export function parseOptionalShirtNumber(raw: string): number | null {
   const n = Number(digits);
   if (!Number.isInteger(n) || n < 0 || n > 999) return null;
   return n;
+}
+
+/** CURP normalizada para `players.doc_id`, o `null` si el campo quedó vacío. */
+export function parseOptionalDocIdCurp(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed.length) return null;
+  return normalizeCurpInput(trimmed);
 }

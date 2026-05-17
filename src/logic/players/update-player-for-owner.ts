@@ -15,6 +15,8 @@ export type UpdatePlayerForOwnerArgs = {
   shirtNumber: number | null;
   position: string | null;
   whatsappE164: string | null;
+  /** CURP en `players.doc_id`; `null` borra el valor guardado. */
+  docId: string | null;
 };
 
 /**
@@ -60,6 +62,7 @@ export async function updatePlayerForOwner(
       .update(players)
       .set({
         fullName: args.fullName.trim(),
+        docId: args.docId,
         birthDate: args.birthDate,
         metadata: nextMeta,
         updatedAt: new Date(),

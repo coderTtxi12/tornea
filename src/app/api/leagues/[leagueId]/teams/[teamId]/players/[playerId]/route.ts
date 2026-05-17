@@ -9,9 +9,11 @@ import {
 import {
   buildOptionalPlayerWhatsappE164,
   newPlayerFormFieldsSchema,
+  parseOptionalDocIdCurp,
   parseOptionalShirtNumber,
 } from "@/components/dashboard/leagues/new-player-form-schema";
 import { getDb } from "@/db/client";
+import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { mergePlayerMetadata } from "@/logic/players/create-player-in-team";
@@ -80,6 +82,7 @@ export async function GET(
         id: result.player.id,
         leagueId: result.player.leagueId,
         fullName: result.player.fullName,
+        docId: result.player.docId,
         birthDate: result.player.birthDate,
         whatsappCountryIso: iso2,
         whatsappPhoneNational: nationalDigits,
@@ -131,6 +134,7 @@ export async function PATCH(
       position: readFormString(form, "position"),
       whatsappCountryIso: readFormString(form, "whatsappCountryIso") || "MX",
       whatsappPhoneNational: readFormString(form, "whatsappPhoneNational"),
+      docId: readFormString(form, "docId"),
     });
     if (!parsed.success) {
       const fields: Record<string, string> = {};
@@ -159,6 +163,7 @@ export async function PATCH(
       shirtNumber: parseOptionalShirtNumber(data.shirtNumber),
       position: data.position ?? null,
       whatsappE164,
+      docId: parseOptionalDocIdCurp(data.docId),
     });
 
     if (updated === "FORBIDDEN") {
@@ -167,6 +172,24 @@ export async function PATCH(
     if (updated === "NOT_FOUND") {
       return NextResponse.json({ error: "Jugador no encontrado." }, { status: 404 });
     }
+
+    const fullNameTrim = data.fullName.trim();
+    await recordAppAuditLog(
+      {
+        actorUserId: appUser.id,
+        action: "update",
+        entityType: AppAuditEntityType.player,
+        entityId: playerId,
+        leagueId,
+        summary: `Jugador actualizado: ${fullNameTrim}`,
+        metadata: {
+          teamId,
+          shirtNumber: parseOptionalShirtNumber(data.shirtNumber),
+          position: data.position?.trim() || null,
+        },
+      },
+      { swallowErrors: true },
+    );
 
     const photoEntry = form.get("photo");
     const curpEntry = form.get("curp");
@@ -233,6 +256,22 @@ export async function PATCH(
           metadataPatch[item.metadataKey] = ref;
         }
         await mergePlayerMetadata(playerId, metadataPatch);
+        await recordAppAuditLog(
+          {
+            actorUserId: appUser.id,
+            action: "update",
+            entityType: AppAuditEntityType.player,
+            entityId: playerId,
+            leagueId,
+            summary: `Archivos del jugador actualizados: ${fullNameTrim}`,
+            metadata: {
+              teamId,
+              subAction: "player_files",
+              files: filesToUpload.map((f) => f.kind),
+            },
+          },
+          { swallowErrors: true },
+        );
       } catch (err) {
         console.error("[PATCH .../players/[playerId]] file upload", err);
         await tryRemovePlayerFiles(storageClient, bucket, uploadedPaths);
