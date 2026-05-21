@@ -196,7 +196,7 @@ function HeroSection({
             </span>
           </h1>
           <p className="text-foreground-muted max-w-lg text-base leading-relaxed sm:text-lg">
-            Crea torneos, arma jornadas, registra planteles y publica resultados desde
+            Crea torneos, arma jornadas, registra partidos y publica resultados desde
             un ecosistema moderno para organizadores de fútbol competitivo.
           </p>
           {!configured && process.env.NODE_ENV === "development" ? (
