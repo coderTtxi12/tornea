@@ -6,7 +6,11 @@ export const LANDING_SPORTS = [
   "Fútbol 7",
   "Fútbol 11",
   "Juvenil",
-  "Veteranos",
+  "Fútbol rápido",
+  "Semi profesional",
+  "Profesional",
+  "Futsal",
+  "Categoría libre",
 ] as const;
 
 /** Etiquetas del rail del panel (`dashboard-nav-config`) para el pie del bento */
