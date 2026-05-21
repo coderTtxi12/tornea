@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import {
   BarChart3,
   CalendarDays,
@@ -27,7 +26,10 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
+import { TorneaLogo } from "@/components/brand/TorneaLogo";
+
 import { LandingBentoCard } from "./LandingBentoCard";
+import { LandingNav } from "./LandingNav";
 import { LandingStickyCta } from "./LandingStickyCta";
 import { useLandingInView } from "./hooks/use-landing-in-view";
 import {
@@ -80,48 +82,6 @@ function usePrefersReducedMotion() {
     subscribeToReducedMotion,
     getReducedMotionSnapshot,
     () => false,
-  );
-}
-
-function TorneaLogo({ className }: { className?: string }) {
-  return (
-    <div className={`flex items-center gap-2.5 ${className ?? ""}`}>
-      <span
-        className="relative flex size-9 shrink-0 items-center justify-center rounded-brand-md bg-gradient-energy font-bold text-brand-navy shadow-[0_0_24px_rgba(125,255,106,0.35)] transition-transform duration-300 hover:scale-105"
-        aria-hidden
-      >
-        T
-      </span>
-      <span className="text-lg font-bold tracking-tight">
-        Tor<span className="bg-gradient-energy bg-clip-text text-transparent">nea</span>
-      </span>
-    </div>
-  );
-}
-
-function LandingNav() {
-  return (
-    <header className="landing-nav fixed inset-x-0 top-0 z-50 border-b border-border/50 px-4 py-3 backdrop-blur-xl sm:px-6">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-        <Link href="/" className="cursor-pointer transition-opacity hover:opacity-90">
-          <TorneaLogo />
-        </Link>
-        <nav className="hidden items-center gap-1 md:flex">
-          <Button variant="ghost" size="sm" asChild>
-            <a href="#features">Funciones</a>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <a href="#jornada">Jornada</a>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <a href="#como-funciona">Cómo funciona</a>
-          </Button>
-        </nav>
-        <Button variant="gradient" size="sm" asChild>
-          <a href="#entrar">Entrar</a>
-        </Button>
-      </div>
-    </header>
   );
 }
 
@@ -347,9 +307,11 @@ export function TorneaLanding() {
 
       <footer className="px-4 py-8 text-center text-xs text-muted-foreground sm:px-6">
         <Separator className="mb-8" />
-        <TorneaLogo className="justify-center" />
-        <p className="mt-3">{LANDING_SLOGAN}</p>
-        <p className="mt-1 opacity-70">© {new Date().getFullYear()} Tornea</p>
+        <div className="flex justify-center">
+          <TorneaLogo variant="banner" />
+        </div>
+        <p className="sr-only">{LANDING_SLOGAN}</p>
+        <p className="mt-4 opacity-70">© {new Date().getFullYear()} Tornea</p>
       </footer>
     </div>
   );

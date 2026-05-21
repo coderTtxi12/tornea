@@ -13,6 +13,8 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-[0_8px_32px_-8px_rgba(37,99,255,0.55)] hover:brightness-110 active:scale-[0.98]",
         gradient:
           "bg-gradient-hero text-white shadow-[0_8px_32px_-8px_rgba(37,99,255,0.55)] hover:brightness-110 active:scale-[0.98]",
+        energy:
+          "bg-gradient-energy text-brand-navy shadow-[0_8px_28px_-8px_rgba(125,255,106,0.4)] hover:brightness-110 active:scale-[0.98]",
         destructive: "bg-destructive text-destructive-foreground hover:brightness-110",
         outline:
           "border border-border bg-transparent text-foreground hover:border-brand-teal/45 hover:bg-accent",

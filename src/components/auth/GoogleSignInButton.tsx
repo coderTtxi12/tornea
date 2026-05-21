@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
-import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
-import { getAuthCallbackUrl } from "@/lib/supabase/site-url";
 import { cn } from "@/lib/utils";
+
+import { useGoogleSignIn } from "./use-google-sign-in";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -46,40 +44,7 @@ export function GoogleSignInButton({
   className,
   align = "center",
 }: GoogleSignInButtonProps) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function handleSignIn() {
-    setError(null);
-
-    if (!isSupabaseAuthConfigured()) {
-      setError(
-        "Faltan las variables NEXT_PUBLIC_SUPABASE_* en .env o .env.local.",
-      );
-      return;
-    }
-
-    setPending(true);
-    try {
-      const supabase = createClient();
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: getAuthCallbackUrl("/dashboard"),
-          queryParams: {
-            prompt: "select_account",
-          },
-        },
-      });
-      if (oauthError) {
-        setError(oauthError.message);
-        setPending(false);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo iniciar sesión con Google.");
-      setPending(false);
-    }
-  }
+  const { signIn, error, pending } = useGoogleSignIn();
 
   const alignClass =
     align === "start"
@@ -94,7 +59,7 @@ export function GoogleSignInButton({
         type="button"
         variant="google"
         size="lg"
-        onClick={() => void handleSignIn()}
+        onClick={() => void signIn()}
         disabled={pending}
         className="w-full sm:w-auto sm:min-w-[260px]"
       >

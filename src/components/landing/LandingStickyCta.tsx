@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 
+import { useGoogleSignIn } from "@/components/auth/use-google-sign-in";
 import { Button } from "@/components/ui/button";
 
 export function LandingStickyCta() {
   const [visible, setVisible] = useState(false);
+  const { signIn, pending } = useGoogleSignIn();
 
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 480);
@@ -20,8 +22,15 @@ export function LandingStickyCta() {
       role="region"
       aria-label="Acceso rápido"
     >
-      <Button variant="gradient" size="lg" className="mx-auto w-full max-w-md" asChild>
-        <a href="#entrar">Entrar con Google</a>
+      <Button
+        type="button"
+        variant="energy"
+        size="lg"
+        className="mx-auto w-full max-w-md"
+        disabled={pending}
+        onClick={() => void signIn()}
+      >
+        {pending ? "Conectando…" : "Entrar con Google"}
       </Button>
     </div>
   );
