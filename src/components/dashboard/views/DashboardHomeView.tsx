@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import {
   MOCK_LEAGUES,
   MOCK_RECENT_RESULTS,
@@ -24,16 +22,14 @@ export function DashboardHomeView() {
   const featured = MOCK_LEAGUES[0];
   const sideCards = MOCK_LEAGUES.slice(1, 3);
 
-  const totals = useMemo(() => {
-    return MOCK_LEAGUES.reduce(
-      (acc, l) => {
-        acc.played += l.stats.matchesPlayed;
-        acc.scheduled += l.stats.matchesScheduled;
-        return acc;
-      },
-      { played: 0, scheduled: 0 },
-    );
-  }, []);
+  const totals = MOCK_LEAGUES.reduce(
+    (acc, l) => {
+      acc.played += l.stats.matchesPlayed;
+      acc.scheduled += l.stats.matchesScheduled;
+      return acc;
+    },
+    { played: 0, scheduled: 0 },
+  );
 
   const standingsPreview = MOCK_STANDINGS_TABLE.slice(0, 4);
 

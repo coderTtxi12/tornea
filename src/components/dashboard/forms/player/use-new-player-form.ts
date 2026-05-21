@@ -123,9 +123,6 @@ export function useNewPlayerForm({
     return teamRows.filter((t) => teamMatchesQuery(t, queryNorm));
   }, [teamRows, teamSearch, selectedTeam]);
 
-  const teamRowsRef = useRef(teamRows);
-  teamRowsRef.current = teamRows;
-
   const fetchEditLeagueId = editTarget?.leagueId ?? null;
   const fetchEditTeamId = editTarget?.teamId ?? null;
   const fetchEditPlayerId = editTarget?.playerId ?? null;
@@ -161,7 +158,7 @@ export function useNewPlayerForm({
       if (curpFileInputRef.current) curpFileInputRef.current.value = "";
 
       setTeamId(fetchEditTeamId);
-      const rowTeam = teamRowsRef.current.find((t) => t.id === fetchEditTeamId);
+      const rowTeam = teamRows.find((t) => t.id === fetchEditTeamId);
       if (rowTeam) {
         setTeamSearch(teamDisplayLabel(rowTeam));
       }
@@ -239,7 +236,7 @@ export function useNewPlayerForm({
     return () => {
       cancelled = true;
     };
-  }, [fetchEditLeagueId, fetchEditTeamId, fetchEditPlayerId, replacePhotoPreview]);
+  }, [fetchEditLeagueId, fetchEditTeamId, fetchEditPlayerId, replacePhotoPreview, teamRows]);
 
   useEffect(() => {
     if (!teamListOpen) return;

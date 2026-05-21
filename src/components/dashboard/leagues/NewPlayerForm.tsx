@@ -38,9 +38,62 @@ type NewPlayerFormProps = {
 };
 
 export function NewPlayerForm(props: NewPlayerFormProps) {
-  const form = useNewPlayerForm(props);
+  const {
+    birthDate,
+    birthDateMax,
+    clearTeamSelection,
+    countryDialOptions,
+    curpFile,
+    curpFileError,
+    curpFileInputRef,
+    curpText,
+    displayPhotoUrl,
+    editLoadError,
+    fieldErrors,
+    filteredTeams,
+    fullName,
+    handleSubmit,
+    isEdit,
+    lockTeamSelection,
+    onCurpFileChange,
+    onPhotoChange,
+    onTeamSearchKeyDown,
+    photoError,
+    photoInputRef,
+    positionCustom,
+    positionPreset,
+    resetForm,
+    selectTeamRow,
+    selectedTeam,
+    setBirthDate,
+    setCurpText,
+    setFullName,
+    setPositionCustom,
+    setPositionPreset,
+    setShirtNumber,
+    setTeamHighlight,
+    setTeamId,
+    setTeamListOpen,
+    setTeamSearch,
+    setWhatsappCountryIso,
+    setWhatsappPhone,
+    shirtNumber,
+    showEditError,
+    showEditLoading,
+    showNoTeams,
+    submitError,
+    submitting,
+    teamComboWrapRef,
+    teamHighlight,
+    teamId,
+    teamListOpen,
+    teamSearch,
+    teamSearchInputRef,
+    whatsappCountryIso,
+    whatsappPhone,
+  } = useNewPlayerForm(props);
 
-  if (form.showNoTeams) {
+  if (showNoTeams) {
     return (
       <div className="w-full space-y-4">
         <div className="border-border bg-surface-code/30 text-foreground-muted rounded-brand-md border px-3 py-3 text-sm">
@@ -58,7 +111,7 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
     );
   }
 
-  if (form.showEditLoading) {
+  if (showEditLoading) {
     return (
       <div className="flex min-h-[14rem] flex-col items-center justify-center gap-3">
         <div
@@ -71,11 +124,11 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
     );
   }
 
-  if (form.showEditError) {
+  if (showEditError) {
     return (
       <div className="w-full space-y-4">
         <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-3 text-sm">
-          {form.editLoadError ?? "No se pudo cargar el jugador."}
+          {editLoadError ?? "No se pudo cargar el jugador."}
         </div>
         <button
           type="button"
@@ -91,7 +144,7 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
   return (
     <div className="w-full">
       <p className="text-foreground-muted mb-6 text-sm leading-relaxed">
-        {form.isEdit ? (
+        {isEdit ? (
           <>
             Modificá los datos del jugador en{" "}
             <span className="text-foreground font-medium">players</span> y la plantilla (
@@ -111,43 +164,43 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
       </p>
 
       <form
-        className={`relative flex flex-col gap-4 ${form.submitting ? "pointer-events-none" : ""}`}
-        onSubmit={form.handleSubmit}
-        aria-busy={form.submitting}
+        className={`relative flex flex-col gap-4 ${submitting ? "pointer-events-none" : ""}`}
+        onSubmit={handleSubmit}
+        aria-busy={submitting}
       >
-        {form.submitError ? (
+        {submitError ? (
           <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-2.5 text-sm">
-            {form.submitError}
+            {submitError}
           </div>
         ) : null}
 
         <PlayerFormTeamPicker
           teamRows={props.teamRows}
-          teamId={form.teamId}
-          teamSearch={form.teamSearch}
-          teamListOpen={form.teamListOpen}
-          teamHighlight={form.teamHighlight}
-          filteredTeams={form.filteredTeams}
-          selectedTeam={form.selectedTeam}
-          fieldError={form.fieldErrors.teamId}
-          disabled={form.lockTeamSelection || form.submitting}
-          lockSelection={form.lockTeamSelection}
-          comboWrapRef={form.teamComboWrapRef}
-          searchInputRef={form.teamSearchInputRef}
+          teamId={teamId}
+          teamSearch={teamSearch}
+          teamListOpen={teamListOpen}
+          teamHighlight={teamHighlight}
+          filteredTeams={filteredTeams}
+          selectedTeam={selectedTeam}
+          fieldError={fieldErrors.teamId}
+          disabled={lockTeamSelection || submitting}
+          lockSelection={lockTeamSelection}
+          comboWrapRef={teamComboWrapRef}
+          searchInputRef={teamSearchInputRef}
           onSearchChange={(value) => {
-            form.setTeamSearch(value);
-            form.setTeamListOpen(true);
-            form.setTeamHighlight(0);
-            if (form.teamId) form.setTeamId("");
+            setTeamSearch(value);
+            setTeamListOpen(true);
+            setTeamHighlight(0);
+            if (teamId) setTeamId("");
           }}
           onSearchFocus={() => {
-            form.setTeamListOpen(true);
-            form.teamSearchInputRef.current?.select();
+            setTeamListOpen(true);
+            teamSearchInputRef.current?.select();
           }}
-          onSearchKeyDown={form.onTeamSearchKeyDown}
-          onSelectTeam={form.selectTeamRow}
-          onClearSelection={form.clearTeamSelection}
-          onHighlightIndex={form.setTeamHighlight}
+          onSearchKeyDown={onTeamSearchKeyDown}
+          onSelectTeam={selectTeamRow}
+          onClearSelection={clearTeamSelection}
+          onHighlightIndex={setTeamHighlight}
         />
 
         <label className="block">
@@ -155,17 +208,17 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
           <input
             type="text"
             name="fullName"
-            value={form.fullName}
-            onChange={(e) => form.setFullName(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
             required
             autoComplete="off"
             placeholder="Ej. Juan Pérez Hernández"
-            disabled={form.submitting}
+            disabled={submitting}
             className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-invalid={!!form.fieldErrors.fullName}
+            aria-invalid={!!fieldErrors.fullName}
           />
-          {form.fieldErrors.fullName ? (
-            <span className="text-brand-purple mt-1 block text-xs">{form.fieldErrors.fullName}</span>
+          {fieldErrors.fullName ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.fullName}</span>
           ) : null}
         </label>
 
@@ -175,18 +228,18 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             id="player-birth-date"
             type="date"
             name="birthDate"
-            value={form.birthDate}
-            onChange={(e) => form.setBirthDate(e.target.value)}
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
             required
             min="1900-01-01"
-            max={form.birthDateMax}
+            max={birthDateMax}
             autoComplete="bday"
-            disabled={form.submitting}
+            disabled={submitting}
             className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-invalid={!!form.fieldErrors.birthDate}
+            aria-invalid={!!fieldErrors.birthDate}
           />
-          {form.fieldErrors.birthDate ? (
-            <span className="text-brand-purple mt-1 block text-xs">{form.fieldErrors.birthDate}</span>
+          {fieldErrors.birthDate ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.birthDate}</span>
           ) : null}
         </label>
 
@@ -199,19 +252,19 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
               type="text"
               inputMode="numeric"
               name="shirtNumber"
-              value={form.shirtNumber}
+              value={shirtNumber}
               onChange={(e) => {
                 const d = e.target.value.replace(/\D/g, "").slice(0, 3);
-                form.setShirtNumber(d);
+                setShirtNumber(d);
               }}
               placeholder="0–999"
-              disabled={form.submitting}
+              disabled={submitting}
               className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-invalid={!!form.fieldErrors.shirtNumber}
+              aria-invalid={!!fieldErrors.shirtNumber}
             />
-            {form.fieldErrors.shirtNumber ? (
+            {fieldErrors.shirtNumber ? (
               <span className="text-brand-purple mt-1 block text-xs">
-                {form.fieldErrors.shirtNumber}
+                {fieldErrors.shirtNumber}
               </span>
             ) : null}
           </label>
@@ -227,16 +280,16 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
               <select
                 id="player-position-select"
                 name="positionPreset"
-                value={form.positionPreset}
+                value={positionPreset}
                 onChange={(e) => {
-                  form.setPositionPreset(e.target.value);
+                  setPositionPreset(e.target.value);
                   if (e.target.value !== POSITION_OTHER_VALUE) {
-                    form.setPositionCustom("");
+                    setPositionCustom("");
                   }
                 }}
-                disabled={form.submitting}
+                disabled={submitting}
                 className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-invalid={!!form.fieldErrors.position}
+                aria-invalid={!!fieldErrors.position}
               >
                 <option value="">Sin asignar</option>
                 {PLAYER_POSITION_PRESETS.map((p) => (
@@ -253,21 +306,21 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
                 <ChevronDownIcon />
               </span>
             </div>
-            {form.positionPreset === POSITION_OTHER_VALUE ? (
+            {positionPreset === POSITION_OTHER_VALUE ? (
               <input
                 type="text"
                 name="positionCustom"
-                value={form.positionCustom}
-                onChange={(e) => form.setPositionCustom(e.target.value.slice(0, 60))}
+                value={positionCustom}
+                onChange={(e) => setPositionCustom(e.target.value.slice(0, 60))}
                 placeholder="Captura la posición"
                 autoFocus
-                disabled={form.submitting}
+                disabled={submitting}
                 className="border-border bg-surface-code/40 mt-2 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-invalid={!!form.fieldErrors.position}
+                aria-invalid={!!fieldErrors.position}
               />
             ) : null}
-            {form.fieldErrors.position ? (
-              <span className="text-brand-purple mt-1 block text-xs">{form.fieldErrors.position}</span>
+            {fieldErrors.position ? (
+              <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.position}</span>
             ) : null}
           </div>
         </div>
@@ -283,15 +336,15 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             <div className="relative w-full min-w-0 shrink-0 sm:max-w-[min(100%,16rem)]">
               <select
                 aria-label="País y código de WhatsApp"
-                value={form.whatsappCountryIso}
+                value={whatsappCountryIso}
                 onChange={(e) => {
-                  form.setWhatsappCountryIso(e.target.value);
-                  form.setWhatsappPhone("");
+                  setWhatsappCountryIso(e.target.value);
+                  setWhatsappPhone("");
                 }}
-                disabled={form.submitting}
+                disabled={submitting}
                 className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 w-full appearance-none rounded-brand-md border py-2.5 pr-9 pl-3 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {form.countryDialOptions.map((c) => (
+                {countryDialOptions.map((c) => (
                   <option key={c.iso2} value={c.iso2}>
                     {flagEmojiFromIso2(c.iso2)} {c.nameEs} (+{c.dialDigits})
                   </option>
@@ -304,28 +357,28 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             <input
               type="tel"
               inputMode="numeric"
-              value={form.whatsappPhone}
+              value={whatsappPhone}
               onChange={(e) => {
                 const d = e.target.value.replace(/\D/g, "");
-                const max = form.whatsappCountryIso.toUpperCase() === "MX" ? 10 : 15;
-                form.setWhatsappPhone(d.slice(0, max));
+                const max = whatsappCountryIso.toUpperCase() === "MX" ? 10 : 15;
+                setWhatsappPhone(d.slice(0, max));
               }}
               placeholder={
-                form.whatsappCountryIso.toUpperCase() === "MX" ? "10 dígitos" : "Número local"
+                whatsappCountryIso.toUpperCase() === "MX" ? "10 dígitos" : "Número local"
               }
-              disabled={form.submitting}
+              disabled={submitting}
               className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 max-h-12 min-h-12 min-w-0 flex-1 rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-invalid={!!form.fieldErrors.whatsappPhoneNational}
+              aria-invalid={!!fieldErrors.whatsappPhoneNational}
             />
           </div>
-          {form.fieldErrors.whatsappCountryIso ? (
+          {fieldErrors.whatsappCountryIso ? (
             <span className="text-brand-purple mt-1 block text-xs">
-              {form.fieldErrors.whatsappCountryIso}
+              {fieldErrors.whatsappCountryIso}
             </span>
           ) : null}
-          {form.fieldErrors.whatsappPhoneNational ? (
+          {fieldErrors.whatsappPhoneNational ? (
             <span className="text-brand-purple mt-1 block text-xs">
-              {form.fieldErrors.whatsappPhoneNational}
+              {fieldErrors.whatsappPhoneNational}
             </span>
           ) : null}
         </fieldset>
@@ -335,23 +388,23 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
           <input
             type="text"
             name="docId"
-            value={form.curpText}
+            value={curpText}
             onChange={(e) => {
               const next = normalizeCurpInput(e.target.value).slice(0, CURP_LENGTH);
-              form.setCurpText(next);
+              setCurpText(next);
             }}
             placeholder={`${CURP_LENGTH} caracteres alfanuméricos`}
             autoComplete="off"
             spellCheck={false}
-            disabled={form.submitting}
+            disabled={submitting}
             className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 mt-1 w-full rounded-brand-md border px-3 py-2 font-mono text-sm tracking-wide uppercase outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-            aria-invalid={!!form.fieldErrors.docId}
+            aria-invalid={!!fieldErrors.docId}
           />
           <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
             Ejemplo: {CURP_FORMAT_EXAMPLE}
           </p>
-          {form.fieldErrors.docId ? (
-            <span className="text-brand-purple mt-1 block text-xs">{form.fieldErrors.docId}</span>
+          {fieldErrors.docId ? (
+            <span className="text-brand-purple mt-1 block text-xs">{fieldErrors.docId}</span>
           ) : null}
         </label>
 
@@ -360,23 +413,23 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             Escaneo de CURP (opcional)
           </legend>
           <input
-            ref={form.curpFileInputRef}
+            ref={curpFileInputRef}
             type="file"
             accept={PLAYER_CURP_ACCEPT_ATTR}
-            disabled={form.submitting}
+            disabled={submitting}
             className="border-border bg-background-muted/30 mt-1 w-full cursor-pointer rounded-brand-md border border-dashed px-2 py-2 text-xs file:mr-2 file:rounded-md file:border-0 file:bg-brand-blue file:px-2 file:py-1 file:text-xs file:text-white"
-            onChange={(e) => form.onCurpFileChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => onCurpFileChange(e.target.files?.[0] ?? null)}
           />
           <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
             PDF, JPG, PNG o WebP · máx.{" "}
             {Math.round(PLAYER_CURP_MAX_FILE_BYTES / (1024 * 1024))} MB
           </p>
-          {form.curpFileError ? (
-            <span className="text-brand-purple mt-1 block text-xs">{form.curpFileError}</span>
+          {curpFileError ? (
+            <span className="text-brand-purple mt-1 block text-xs">{curpFileError}</span>
           ) : null}
-          {form.curpFile ? (
+          {curpFile ? (
             <p className="text-foreground-muted mt-1 truncate text-[11px]">
-              Archivo: <span className="text-foreground font-medium">{form.curpFile.name}</span>
+              Archivo: <span className="text-foreground font-medium">{curpFile.name}</span>
             </p>
           ) : null}
         </fieldset>
@@ -386,25 +439,25 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             Foto del jugador (opcional)
           </legend>
           <input
-            ref={form.photoInputRef}
+            ref={photoInputRef}
             type="file"
             accept={PLAYER_PHOTO_ACCEPT_ATTR}
-            disabled={form.submitting}
+            disabled={submitting}
             className="border-border bg-background-muted/30 mt-1 w-full cursor-pointer rounded-brand-md border border-dashed px-2 py-2 text-xs file:mr-2 file:rounded-md file:border-0 file:bg-brand-blue file:px-2 file:py-1 file:text-xs file:text-white"
-            onChange={(e) => form.onPhotoChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)}
           />
           <p className="text-foreground-subtle mt-1 text-[10px] leading-relaxed">
             JPG, PNG o WebP · máx.{" "}
             {Math.round(PLAYER_PHOTO_MAX_FILE_BYTES / (1024 * 1024))} MB.
           </p>
-          {form.photoError ? (
-            <span className="text-brand-purple mt-1 block text-xs">{form.photoError}</span>
+          {photoError ? (
+            <span className="text-brand-purple mt-1 block text-xs">{photoError}</span>
           ) : null}
-          {form.displayPhotoUrl ? (
+          {displayPhotoUrl ? (
             <div className="border-border mt-2 flex justify-center rounded-brand-md border bg-surface-code/20 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={form.displayPhotoUrl}
+                src={displayPhotoUrl}
                 alt="Vista previa de la foto del jugador"
                 className="max-h-32 max-w-32 rounded-md object-cover"
               />
@@ -417,25 +470,25 @@ export function NewPlayerForm(props: NewPlayerFormProps) {
             type="button"
             className="border-border text-foreground-muted hover:text-foreground rounded-full border px-5 py-2.5 text-sm font-medium disabled:opacity-50"
             onClick={() => {
-              if (!form.isEdit) {
-                form.resetForm();
+              if (!isEdit) {
+                resetForm();
               }
               props.onClose();
             }}
-            disabled={form.submitting}
+            disabled={submitting}
           >
             Cancelar
           </button>
           <button
             type="submit"
             className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-            disabled={form.submitting || !form.teamId}
+            disabled={submitting || !teamId}
           >
-            {form.submitting
-              ? form.isEdit
+            {submitting
+              ? isEdit
                 ? "Guardando cambios…"
                 : "Guardando…"
-              : form.isEdit
+              : isEdit
                 ? "Guardar cambios"
                 : "Guardar jugador"}
           </button>

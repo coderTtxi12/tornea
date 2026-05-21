@@ -37,7 +37,9 @@ export function useMyLeagues(userId: string | undefined) {
     if (!userId) return;
 
     let cancelled = false;
-    setMyLeagues({ status: "loading" });
+    queueMicrotask(() => {
+      if (!cancelled) setMyLeagues({ status: "loading" });
+    });
 
     void (async () => {
       try {

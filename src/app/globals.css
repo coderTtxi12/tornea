@@ -83,6 +83,28 @@ html[data-theme="light"] {
   --color-brand-off-white: var(--tornea-off-white);
   --color-brand-light-gray: var(--tornea-light-gray);
 
+  /* shadcn/ui semantic tokens (Tornea dark) */
+  --color-primary: var(--tornea-blue);
+  --color-primary-foreground: var(--tornea-off-white);
+  --color-secondary: color-mix(in srgb, var(--tornea-slate) 70%, transparent);
+  --color-secondary-foreground: var(--tornea-off-white);
+  --color-muted: var(--background-muted);
+  --color-muted-foreground: var(--foreground-muted);
+  --color-accent: color-mix(in srgb, var(--tornea-teal) 18%, transparent);
+  --color-accent-foreground: var(--tornea-teal);
+  --color-card: var(--surface-card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--tornea-navy-deep);
+  --color-popover-foreground: var(--foreground);
+  --color-destructive: #f87171;
+  --color-destructive-foreground: var(--tornea-off-white);
+  --color-ring: var(--ring-focus);
+  --color-input: var(--border);
+  --radius-sm: var(--radius-brand-sm);
+  --radius-md: var(--radius-brand-md);
+  --radius-lg: var(--radius-brand-lg);
+  --radius-xl: var(--radius-brand-xl);
+
   --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
@@ -147,5 +169,449 @@ html[data-theme="light"] .login-blobs {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* ─── Marketing landing (TorneaLanding) ─── */
+.landing-page {
+  --landing-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-aurora::before,
+.landing-aurora::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.35;
+  animation: landing-aurora-drift 18s var(--landing-ease) infinite alternate;
+}
+
+.landing-aurora::before {
+  width: min(70vw, 520px);
+  height: min(70vw, 520px);
+  top: -12%;
+  left: -8%;
+  background: var(--tornea-blue);
+}
+
+.landing-aurora::after {
+  width: min(60vw, 440px);
+  height: min(60vw, 440px);
+  bottom: 10%;
+  right: -6%;
+  background: var(--tornea-purple);
+  animation-delay: -6s;
+}
+
+.landing-nav {
+  background: color-mix(in srgb, var(--tornea-navy) 72%, transparent);
+}
+
+.landing-nav-link:hover {
+  color: var(--tornea-teal);
+}
+
+.landing-cta-sm:focus-visible {
+  outline-offset: 2px;
+}
+
+.landing-ghost-btn:hover {
+  border-color: color-mix(in srgb, var(--tornea-teal) 45%, transparent);
+  background: color-mix(in srgb, var(--tornea-teal) 8%, transparent);
+  color: var(--foreground);
+}
+
+.landing-grid-overlay {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--tornea-teal) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--tornea-teal) 12%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.landing-pulse-dot {
+  animation: landing-pulse 2s ease-in-out infinite;
+}
+
+.landing-hero-frame {
+  perspective: 1200px;
+  mask-image: radial-gradient(ellipse at center, black 58%, transparent 76%);
+}
+
+.landing-hero-cta-panel {
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 6%, transparent),
+    0 20px 48px -28px color-mix(in srgb, var(--tornea-blue) 45%, transparent);
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+@media (hover: hover) {
+  .landing-hero-cta-panel:hover {
+    border-color: color-mix(in srgb, var(--tornea-teal) 32%, transparent);
+    box-shadow:
+      0 1px 0 color-mix(in srgb, white 8%, transparent),
+      0 24px 56px -24px color-mix(in srgb, var(--tornea-teal) 35%, transparent);
+  }
+}
+
+.landing-css-3d-scene {
+  position: absolute;
+  inset: 4%;
+  display: grid;
+  place-items: center;
+  opacity: 0.78;
+  transform: perspective(900px) rotateX(58deg) rotateZ(-8deg);
+  transform-style: preserve-3d;
+}
+
+.landing-css-3d-scene--hidden .landing-css-3d-scene {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.landing-css-pitch {
+  position: relative;
+  width: min(92%, 560px);
+  aspect-ratio: 1.72;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--tornea-lime) 48%, transparent);
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--tornea-teal) 18%, transparent), transparent 26%),
+    linear-gradient(90deg, color-mix(in srgb, #0b5b34 88%, black) 0 50%, #0f6a3c 50% 100%);
+  background-size: auto, 48px 100%;
+  box-shadow:
+    0 0 70px color-mix(in srgb, var(--tornea-teal) 28%, transparent),
+    inset 0 0 32px color-mix(in srgb, black 28%, transparent);
+  animation: landing-css-pitch-float 5s ease-in-out infinite;
+}
+
+.landing-css-pitch::before {
+  content: "";
+  position: absolute;
+  inset: 1rem;
+  border: 1px solid color-mix(in srgb, white 34%, transparent);
+  border-radius: 1rem;
+}
+
+.landing-css-midline,
+.landing-css-circle,
+.landing-css-goal,
+.landing-css-player {
+  position: absolute;
+  display: block;
+}
+
+.landing-css-midline {
+  top: 1rem;
+  bottom: 1rem;
+  left: 50%;
+  width: 1px;
+  background: color-mix(in srgb, white 32%, transparent);
+}
+
+.landing-css-circle {
+  top: 50%;
+  left: 50%;
+  width: 24%;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, white 34%, transparent);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.landing-css-goal {
+  top: 50%;
+  width: 9%;
+  height: 34%;
+  border: 1px solid color-mix(in srgb, white 34%, transparent);
+  transform: translateY(-50%);
+}
+
+.landing-css-goal-left {
+  left: 1rem;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+}
+
+.landing-css-goal-right {
+  right: 1rem;
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.landing-css-player {
+  left: var(--player-x);
+  top: var(--player-y);
+  width: 0.75rem;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: var(--player-color);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--player-color) 74%, transparent);
+  transform: translate(-50%, -50%) translateZ(36px);
+  animation: landing-css-player-press 2.4s ease-in-out infinite;
+  animation-delay: var(--player-delay);
+}
+
+/* Scroll-triggered reveal (IntersectionObserver → .landing-in-view) */
+.landing-scroll-reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition:
+    opacity 0.7s var(--landing-ease),
+    transform 0.7s var(--landing-ease);
+}
+
+.landing-scroll-reveal.landing-in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Bento: base hover + 3D tilt (ui-ux: scale 1.02, tilt) */
+.landing-bento-tilt {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition:
+    transform 0.28s var(--landing-ease),
+    border-color 0.28s ease,
+    box-shadow 0.28s ease;
+}
+
+.landing-bento-card:hover {
+  border-color: color-mix(in srgb, var(--tornea-teal) 35%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 8%, transparent),
+    0 28px 56px -20px color-mix(in srgb, var(--tornea-blue) 45%, transparent);
+}
+
+@media (hover: hover) {
+  .landing-bento-tilt:hover {
+    transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
+      translateY(-4px);
+  }
+}
+
+/* Sticky mobile CTA */
+.landing-sticky-cta {
+  transform: translateY(100%);
+  transition: transform 0.35s var(--landing-ease);
+  background: color-mix(in srgb, var(--tornea-navy) 88%, transparent);
+}
+
+.landing-sticky-cta--visible {
+  transform: translateY(0);
+}
+
+.landing-stat-card {
+  transition: transform 0.25s var(--landing-ease);
+}
+
+.landing-stat-card:hover {
+  transform: translateY(-3px);
+}
+
+.landing-matchday-panel {
+  transition:
+    transform 0.28s var(--landing-ease),
+    border-color 0.28s ease,
+    box-shadow 0.28s ease;
+}
+
+@media (hover: hover) {
+  .landing-matchday-panel:hover {
+    transform: translateY(-5px);
+    border-color: color-mix(in srgb, var(--tornea-lime) 32%, transparent);
+    box-shadow: 0 28px 70px -32px color-mix(in srgb, var(--tornea-teal) 48%, transparent);
+  }
+}
+
+.landing-pitch-card,
+.landing-mini-pitch {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, #0c5a33 88%, black) 0 50%, #0f6a3c 50% 100%),
+    #0c5a33;
+  background-size: 32px 100%;
+}
+
+.landing-mini-pitch::before,
+.landing-mini-pitch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 36px;
+  height: 86px;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, white 35%, transparent);
+}
+
+.landing-mini-pitch::before {
+  left: 1rem;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+}
+
+.landing-mini-pitch::after {
+  right: 1rem;
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.landing-player-dot {
+  animation: landing-player-press 2.8s ease-in-out infinite;
+}
+
+.landing-step-card {
+  transition:
+    transform 0.25s var(--landing-ease),
+    border-color 0.25s ease;
+}
+
+.landing-step-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--tornea-lime) 30%, transparent);
+}
+
+.landing-cta-band {
+  background: var(--tornea-gradient-night);
+}
+
+.landing-cta-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 100%,
+    color-mix(in srgb, var(--tornea-blue) 28%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.landing-marquee-track {
+  animation: landing-marquee 28s linear infinite;
+}
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  animation: landing-fade-up 0.75s var(--landing-ease) forwards;
+}
+
+.landing-reveal-delay-2 {
+  animation-delay: 0.15s;
+}
+
+.landing-reveal-delay-3 {
+  animation-delay: 0.28s;
+}
+
+.landing-static-orb {
+  box-shadow:
+    0 0 60px color-mix(in srgb, var(--tornea-teal) 50%, transparent),
+    0 0 120px color-mix(in srgb, var(--tornea-blue) 35%, transparent);
+}
+
+@keyframes landing-fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-aurora-drift {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(4%, 6%) scale(1.08);
+  }
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes landing-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes landing-css-pitch-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@keyframes landing-css-player-press {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateZ(36px);
+  }
+  50% {
+    transform: translate(calc(-50% + 5px), calc(-50% - 4px)) translateZ(36px);
+  }
+}
+
+@keyframes landing-player-press {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(6px, -4px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-aurora::before,
+  .landing-aurora::after,
+  .landing-marquee-track,
+  .landing-reveal,
+  .landing-pulse-dot,
+  .landing-css-pitch,
+  .landing-css-player {
+    animation: none;
+  }
+
+  .landing-reveal,
+  .landing-scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .landing-bento-tilt,
+  .landing-bento-tilt:hover,
+  .landing-matchday-panel:hover,
+  .landing-stat-card:hover,
+  .landing-step-card:hover {
+    transform: none;
+  }
+
+  .landing-player-dot {
+    animation: none;
+  }
+
+  .landing-sticky-cta {
+    display: none;
   }
 }

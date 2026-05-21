@@ -68,20 +68,25 @@ export function NewVenueForm({
   useEffect(() => {
     if (isEdit) return;
     if (leagues.length === 1) {
-      setLeagueId(leagues[0]!.id);
+      queueMicrotask(() => setLeagueId(leagues[0]!.id));
     }
   }, [leagues, isEdit]);
 
   useEffect(() => {
     if (!isEdit || !editTarget) {
-      setLoadState("ready");
-      setLoadError(null);
+      queueMicrotask(() => {
+        setLoadState("ready");
+        setLoadError(null);
+      });
       return;
     }
 
     let cancelled = false;
-    setLoadState("loading");
-    setLoadError(null);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoadState("loading");
+      setLoadError(null);
+    });
 
     void (async () => {
       try {
@@ -146,7 +151,7 @@ export function NewVenueForm({
     return () => {
       cancelled = true;
     };
-  }, [isEdit, editTarget?.leagueId, editTarget?.venueId]);
+  }, [isEdit, editTarget]);
 
   function resetForm() {
     setName("");

@@ -3,8 +3,6 @@
 import type { MyLeaguesTeamRow } from "@/components/dashboard/leagues/my-leagues-state";
 
 import { ChevronDownIcon, CloseIcon, SearchIcon } from "./player-form-icons";
-import { teamDisplayLabel } from "./player-form-utils";
-
 export type PlayerFormTeamPickerProps = {
   teamRows: readonly MyLeaguesTeamRow[];
   teamId: string;

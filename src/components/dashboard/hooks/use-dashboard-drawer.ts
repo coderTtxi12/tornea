@@ -120,7 +120,7 @@ export function useDashboardDrawer(): {
   );
 
   useEffect(() => {
-    setDrawerBusy(false);
+    queueMicrotask(() => setDrawerBusy(false));
   }, [drawer.kind]);
 
   const openers: DashboardDrawerOpeners = {

@@ -76,12 +76,16 @@ export function LeagueAdministratorsSettings({
   }, [leagueId]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   useEffect(() => {
     if (leagues.length === 0) return;
-    setLeagueId((prev) => (leagues.some((l) => l.id === prev) ? prev : leagues[0]!.id));
+    queueMicrotask(() => {
+      setLeagueId((prev) => (leagues.some((l) => l.id === prev) ? prev : leagues[0]!.id));
+    });
   }, [leagues]);
 
   async function onAdd(e: React.FormEvent) {

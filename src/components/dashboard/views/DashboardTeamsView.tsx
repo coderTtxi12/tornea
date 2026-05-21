@@ -45,7 +45,7 @@ export function DashboardTeamsView({
 
   useEffect(() => {
     if (teamRows.length === 0) {
-      setCanClearTable(false);
+      queueMicrotask(() => setCanClearTable(false));
     }
   }, [teamRows.length]);
 

@@ -210,7 +210,7 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
   }, []);
 
   useEffect(() => {
-    setPortalMounted(true);
+    queueMicrotask(() => setPortalMounted(true));
   }, []);
 
   const hasActiveColumnFilters =
@@ -239,7 +239,7 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
   );
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => setPage(1));
   }, [filterLeague, filterCategory, filterStatus, filterCode]);
 
   useEffect(() => {
@@ -321,7 +321,7 @@ export const TeamsFilterableTable = forwardRef<TeamsFilterableTableHandle, Teams
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredSortedRows.length / TEAMS_UI_PAGE_SIZE));
-    setPage((p) => Math.min(p, maxPage));
+    queueMicrotask(() => setPage((p) => Math.min(p, maxPage)));
   }, [filteredSortedRows.length]);
 
   const totalFiltered = filteredSortedRows.length;

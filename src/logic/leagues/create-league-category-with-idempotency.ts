@@ -9,7 +9,6 @@ import { userCanManageLeague } from "@/logic/leagues/league-dashboard-admin";
 import {
   leagueCategories,
   leagueCategoryCreateIdempotency,
-  leagues,
 } from "@/db/schema";
 
 export type LeagueCategoryGenderDb = "male" | "female" | "mixed" | "unspecified";

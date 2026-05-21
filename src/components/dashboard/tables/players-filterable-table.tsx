@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 /**
  * Tabla de plantillas / jugadores del dashboard (`MyLeaguesPlayerRow`).
  * Misma UX que `teams-filterable-table` (filtros en portal, chips, orden, borrar desde la vista).
@@ -51,7 +53,7 @@ function PlayerAvatarCell({ row }: { row: MyLeaguesPlayerRow }) {
   const [broken, setBroken] = useState(false);
 
   useEffect(() => {
-    setBroken(false);
+    queueMicrotask(() => setBroken(false));
   }, [url]);
 
   const showPhoto = url.length > 0 && !broken;
@@ -347,7 +349,7 @@ export const PlayersFilterableTable = forwardRef<
   }, [playerRows]);
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => setPage(1));
   }, [filterLeague, filterClub, filterPosition]);
 
   const filteredSortedRows = useMemo(() => {
@@ -382,7 +384,7 @@ export const PlayersFilterableTable = forwardRef<
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(filteredSortedRows.length / UI_PAGE_SIZE));
-    setPage((p) => Math.min(p, maxPage));
+    queueMicrotask(() => setPage((p) => Math.min(p, maxPage)));
   }, [filteredSortedRows.length]);
 
   const totalFiltered = filteredSortedRows.length;

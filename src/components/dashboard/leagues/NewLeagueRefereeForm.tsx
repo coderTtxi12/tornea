@@ -70,15 +70,17 @@ export function NewLeagueRefereeForm({
   }, [onBusyChange]);
 
   useEffect(() => {
-    if (leagues.length === 1) {
-      setLeagueId((prev) => (prev === leagues[0]!.id ? prev : leagues[0]!.id));
-      return;
-    }
-    if (leagues.length === 0) {
-      setLeagueId("");
-      return;
-    }
-    setLeagueId((prev) => (prev && leagues.some((l) => l.id === prev) ? prev : ""));
+    queueMicrotask(() => {
+      if (leagues.length === 1) {
+        setLeagueId((prev) => (prev === leagues[0]!.id ? prev : leagues[0]!.id));
+        return;
+      }
+      if (leagues.length === 0) {
+        setLeagueId("");
+        return;
+      }
+      setLeagueId((prev) => (prev && leagues.some((l) => l.id === prev) ? prev : ""));
+    });
   }, [leagues]);
 
   function resetForm() {

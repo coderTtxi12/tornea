@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -81,20 +83,25 @@ export function NewTeamForm({
   useEffect(() => {
     if (isEdit) return;
     if (leagues.length === 1) {
-      setLeagueId(leagues[0]!.id);
+      queueMicrotask(() => setLeagueId(leagues[0]!.id));
     }
   }, [leagues, isEdit]);
 
   useEffect(() => {
     if (!editTarget) {
-      setLoadState("ready");
-      setLoadError(null);
+      queueMicrotask(() => {
+        setLoadState("ready");
+        setLoadError(null);
+      });
       return;
     }
 
     let cancelled = false;
-    setLoadState("loading");
-    setLoadError(null);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoadState("loading");
+      setLoadError(null);
+    });
 
     void (async () => {
       try {
@@ -180,16 +187,16 @@ export function NewTeamForm({
   useEffect(() => {
     if (!leagueCategoryId) return;
     const ok = categories.some((c) => c.id === leagueCategoryId);
-    if (!ok) setLeagueCategoryId("");
+    if (!ok) queueMicrotask(() => setLeagueCategoryId(""));
   }, [categories, leagueCategoryId]);
 
   useEffect(() => {
     if (!crest) {
-      setCrestPreviewUrl(null);
+      queueMicrotask(() => setCrestPreviewUrl(null));
       return undefined;
     }
     const url = URL.createObjectURL(crest);
-    setCrestPreviewUrl(url);
+    queueMicrotask(() => setCrestPreviewUrl(url));
     return () => {
       URL.revokeObjectURL(url);
     };

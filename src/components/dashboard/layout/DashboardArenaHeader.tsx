@@ -36,13 +36,15 @@ function IconBell({ className }: { className?: string }) {
 function useSearchShortcutOs() {
   const [mode, setMode] = useState<"mac" | "other" | null>(null);
   useEffect(() => {
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
-    const mac =
-      /Mac|iPhone|iPad|iPod/i.test(ua) ||
-      platform === "MacIntel" ||
-      platform.toUpperCase().includes("MAC");
-    setMode(mac ? "mac" : "other");
+    queueMicrotask(() => {
+      const ua = navigator.userAgent;
+      const platform = navigator.platform;
+      const mac =
+        /Mac|iPhone|iPad|iPod/i.test(ua) ||
+        platform === "MacIntel" ||
+        platform.toUpperCase().includes("MAC");
+      setMode(mac ? "mac" : "other");
+    });
   }, []);
   return mode;
 }

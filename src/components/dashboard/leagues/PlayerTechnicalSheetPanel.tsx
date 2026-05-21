@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useCallback, useEffect, useState } from "react";
 
 type SheetApiPayload = {
@@ -291,12 +293,14 @@ export function PlayerTechnicalSheetPanel({
   }, [leagueId, teamId, playerId]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   const [photoBroken, setPhotoBroken] = useState(false);
   useEffect(() => {
-    setPhotoBroken(false);
+    queueMicrotask(() => setPhotoBroken(false));
   }, [sheet?.player.photoUrl]);
 
   const downloadPhoto = useCallback(async () => {

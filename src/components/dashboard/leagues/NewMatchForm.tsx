@@ -189,7 +189,7 @@ export function NewMatchForm({
     if (isEdit || !selectedLeague?.seasons.length) return;
     if (selectedLeague.seasons.length === 1) {
       const only = selectedLeague.seasons[0]!.id;
-      if (seasonId !== only) setSeasonId(only);
+      if (seasonId !== only) queueMicrotask(() => setSeasonId(only));
     }
   }, [isEdit, selectedLeague, seasonId]);
 

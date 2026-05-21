@@ -4,7 +4,6 @@ import * as schema from "./schema";
 
 declare global {
   /** Preserve pool across Next.js dev HMR. */
-  // eslint-disable-next-line no-var
   var __torneaPgPool: Pool | undefined;
 }
 

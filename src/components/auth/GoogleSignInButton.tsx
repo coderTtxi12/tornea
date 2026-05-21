@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 import { getAuthCallbackUrl } from "@/lib/supabase/site-url";
+import { cn } from "@/lib/utils";
 
 function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -34,7 +36,16 @@ function GoogleGlyph({ className }: { className?: string }) {
   );
 }
 
-export function GoogleSignInButton() {
+type GoogleSignInButtonProps = {
+  className?: string;
+  /** Alineación del botón dentro del contenedor */
+  align?: "start" | "center" | "stretch";
+};
+
+export function GoogleSignInButton({
+  className,
+  align = "center",
+}: GoogleSignInButtonProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -43,7 +54,7 @@ export function GoogleSignInButton() {
 
     if (!isSupabaseAuthConfigured()) {
       setError(
-        "Faltan las variables NEXT_PUBLIC_SUPABASE_* en .env / .env.local.",
+        "Faltan las variables NEXT_PUBLIC_SUPABASE_* en .env o .env.local.",
       );
       return;
     }
@@ -64,26 +75,34 @@ export function GoogleSignInButton() {
         setError(oauthError.message);
         setPending(false);
       }
-      /* Si no hay error, el navegador redirige a Google. */
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo iniciar Google.");
+      setError(e instanceof Error ? e.message : "No se pudo iniciar sesión con Google.");
       setPending(false);
     }
   }
 
+  const alignClass =
+    align === "start"
+      ? "items-stretch sm:items-start"
+      : align === "stretch"
+        ? "items-stretch"
+        : "items-stretch sm:items-center";
+
   return (
-    <div className="flex w-full flex-col items-center gap-2">
-      <button
+    <div className={cn("flex w-full flex-col gap-2", alignClass, className)}>
+      <Button
         type="button"
+        variant="google"
+        size="lg"
         onClick={() => void handleSignIn()}
         disabled={pending}
-        className="border-border flex w-full max-w-[min(100%,280px)] cursor-pointer items-center justify-center gap-3 rounded-brand-lg border bg-white px-5 py-3.5 text-[0.9375rem] font-semibold tracking-tight text-brand-navy shadow-[var(--card-shadow)] transition hover:bg-white/95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 min-[420px]:max-w-[300px]"
+        className="w-full sm:w-auto sm:min-w-[260px]"
       >
         <GoogleGlyph />
         {pending ? "Conectando…" : "Continuar con Google"}
-      </button>
+      </Button>
       {error ? (
-        <p className="max-w-[min(100%,320px)] text-center text-xs leading-snug text-red-400">
+        <p className="text-center text-xs leading-snug text-destructive sm:text-left">
           {error}
         </p>
       ) : null}
