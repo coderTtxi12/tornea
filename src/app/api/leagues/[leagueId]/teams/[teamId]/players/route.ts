@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   PLAYER_CURP_MAX_FILE_BYTES,
@@ -11,9 +17,8 @@ import {
   newPlayerFormFieldsSchema,
   parseOptionalDocIdCurp,
   parseOptionalShirtNumber,
-} from "@/components/dashboard/leagues/new-player-form-schema";
+} from "@/schemas/dashboard/new-player-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import {
   createPlayerInTeam,
   deletePlayerById,
@@ -21,13 +26,8 @@ import {
 } from "@/logic/players/create-player-in-team";
 import { tryRemovePlayerFiles, uploadPlayerFile } from "@/logic/players/upload-player-files";
 import { leagueShieldStorageBucket } from "@/logic/leagues/upload-league-shield";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /** Código PostgreSQL en la cadena de `cause` (Drizzle / node-pg). */
 function pgErrorCode(err: unknown): string | undefined {
@@ -66,15 +66,9 @@ export async function POST(
       return NextResponse.json({ error: "Liga o equipo no válidos." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsed = newPlayerFormFieldsSchema.safeParse({
@@ -89,14 +83,7 @@ export async function POST(
       docId: readFormString(form, "docId"),
     });
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && fields[seg] === undefined) {
-          fields[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields }, { status: 400 });
+      return validationErrorFromZod(parsed.error);
     }
 
     const data = parsed.data;
@@ -203,7 +190,7 @@ export async function POST(
     if (filesToUpload.length > 0) {
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
-      const storageClient = service ?? supabase;
+      const storageClient = service ?? (await createClient());
 
       const uploadedPaths: string[] = [];
       const metadataPatch: Record<string, unknown> = {};

@@ -1,5 +1,11 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
@@ -8,24 +14,18 @@ import {
 import {
   newVenueFormFieldsSchema,
   venueSurfaceDisplayLabel,
-} from "@/components/dashboard/leagues/new-venue-form-schema";
+} from "@/schemas/dashboard/new-venue-form-schema";
 import { getDb } from "@/db/client";
 import { venues } from "@/db/schema";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { createVenueInLeague } from "@/logic/leagues/create-venue-in-league";
 import {
   leagueShieldStorageBucket,
 } from "@/logic/leagues/upload-league-shield";
 import { uploadVenueGalleryImages } from "@/logic/leagues/upload-venue-photos";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 const MAX_VENUE_PHOTOS = 8;
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /**
  * POST — crear cancha (`venues`) en una liga del dueño.
@@ -41,16 +41,9 @@ export async function POST(
       return NextResponse.json({ error: "Liga no válida" }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsedFields = newVenueFormFieldsSchema.safeParse({
@@ -62,14 +55,7 @@ export async function POST(
     });
 
     if (!parsedFields.success) {
-      const errors: Record<string, string> = {};
-      for (const issue of parsedFields.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && errors[seg] === undefined) {
-          errors[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields: errors }, { status: 400 });
+      return validationErrorFromZod(parsedFields.error);
     }
 
     const d = parsedFields.data;
@@ -146,7 +132,7 @@ export async function POST(
 
     const bucket = leagueShieldStorageBucket();
     const service = createServiceRoleClient();
-    const storageClient = service ?? supabase;
+    const storageClient = service ?? (await createClient());
 
     let filePayload: { bytes: Uint8Array; contentType: string }[];
     try {

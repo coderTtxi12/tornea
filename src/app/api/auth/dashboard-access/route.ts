@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
 
-import {
-  hasDashboardAccessForAuthUserId,
-  syncAppUserFromSupabaseAuthUser,
-} from "@/logic/auth/dashboard-access";
-import { createClient } from "@/lib/supabase/server";
+import { requireAppUser } from "@/lib/api";
+import { hasDashboardAccessForAuthUserId } from "@/logic/auth/dashboard-access";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const auth = await requireAppUser();
+  if (!auth.ok) {
     return NextResponse.json({ allowed: false }, { status: 401 });
   }
 
-  await syncAppUserFromSupabaseAuthUser(user);
-  const allowed = await hasDashboardAccessForAuthUserId(user.id);
+  const allowed = await hasDashboardAccessForAuthUserId(auth.ctx.authUser.id);
   return NextResponse.json({ allowed });
 }

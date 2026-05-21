@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { newMatchJsonSchema } from "@/components/dashboard/leagues/new-match-form-schema";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser, validationErrorFromZod, validationErrorResponse } from "@/lib/api";
+
+import { newMatchJsonSchema } from "@/schemas/dashboard/new-match-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
 import {
   createMatchInLeague,
   type CreateMatchInLeagueResult,
 } from "@/logic/leagues/create-match-in-league";
-import { createClient } from "@/lib/supabase/server";
 
 function mapCreateError(
   reason: Extract<CreateMatchInLeagueResult, { ok: false }>["reason"],
@@ -60,15 +60,9 @@ export async function POST(
       return NextResponse.json({ error: "Liga no válida" }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     let body: unknown;
     try {
       body = await request.json();
@@ -78,23 +72,15 @@ export async function POST(
 
     const parsed = newMatchJsonSchema.safeParse(body);
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const key = issue.path[0];
-        if (typeof key === "string" && fields[key] === undefined) {
-          fields[key] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields }, { status: 400 });
+      return validationErrorFromZod(parsed.error);
     }
 
     const d = parsed.data;
     const scheduledAt = new Date(d.scheduledAt);
     if (Number.isNaN(scheduledAt.getTime())) {
-      return NextResponse.json(
-        { error: "Validación", fields: { scheduledAt: "La fecha u hora no es válida." } },
-        { status: 400 },
-      );
+      return validationErrorResponse({
+        scheduledAt: "La fecha u hora no es válida.",
+      });
     }
 
     const result = await createMatchInLeague({

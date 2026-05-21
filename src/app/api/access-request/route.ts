@@ -1,24 +1,18 @@
 import { NextResponse } from "next/server";
 
+import { requireAppUser } from "@/lib/api";
 import {
   accessRequestFormSchema,
   insertDashboardAccessRequest,
 } from "@/logic/access-request/access-request-form";
-import {
-  syncAppUserFromSupabaseAuthUser,
-  userRowHasDashboardAccess,
-} from "@/logic/auth/dashboard-access";
-import { createClient } from "@/lib/supabase/server";
+import { userRowHasDashboardAccess } from "@/logic/auth/dashboard-access";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireAppUser();
+  if (!auth.ok) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const { appUser } = auth.ctx;
 
   let body: unknown;
   try {
@@ -35,7 +29,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const appUser = await syncAppUserFromSupabaseAuthUser(user);
   if (userRowHasDashboardAccess(appUser)) {
     return NextResponse.json(
       { error: "Ya tienes acceso al panel." },
@@ -50,7 +43,10 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, id: row.id });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Error al guardar";
-    return NextResponse.json({ error: message }, { status: 400 });
+    console.error("[POST /api/access-request]", e);
+    return NextResponse.json(
+      { error: "No se pudo registrar la solicitud." },
+      { status: 500 },
+    );
   }
 }

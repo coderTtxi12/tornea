@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser } from "@/lib/api";
+
 import { listSeasonTeamsForScheduling } from "@/logic/leagues/list-season-teams-for-scheduling";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET — equipos inscriptos en la temporada (`season_teams`), para armar fixture.
@@ -17,15 +17,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await listSeasonTeamsForScheduling({
       actorUserId: appUser.id,
       leagueId,

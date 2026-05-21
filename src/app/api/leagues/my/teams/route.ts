@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser } from "@/lib/api";
 import {
   listOwnedTeamDashboardRowsPage,
   parseOwnedTeamsCursor,
 } from "@/logic/leagues/list-owned-team-dashboard-rows";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET — siguiente página de equipos (misma heurística de temporada que `/api/leagues/my`).
@@ -13,14 +12,8 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function GET(req: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
 
     const url = new URL(req.url);
     const cursorRaw = url.searchParams.get("cursor");
@@ -28,7 +21,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Cursor inválido" }, { status: 400 });
     }
 
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const { appUser } = auth.ctx;
     const page = await listOwnedTeamDashboardRowsPage(appUser.id, {
       cursor: cursorRaw,
     });

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser } from "@/lib/api";
+
 import { listOwnedMatchDashboardAll } from "@/logic/leagues/list-owned-match-dashboard-rows";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET — todos los partidos de ligas gestionadas.
@@ -10,16 +10,9 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function GET() {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const matches = await listOwnedMatchDashboardAll(appUser.id);
 
     return NextResponse.json({ matches });

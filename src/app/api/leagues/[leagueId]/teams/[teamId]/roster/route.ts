@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser } from "@/lib/api";
+
 import { listTeamRosterDashboardRows } from "@/logic/leagues/list-team-roster-dashboard-rows";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET — plantilla del equipo en la temporada objetivo (`team_rosters` + `players`).
@@ -17,15 +17,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await listTeamRosterDashboardRows(appUser.id, leagueId, teamId);
 
     if (result === "FORBIDDEN") {

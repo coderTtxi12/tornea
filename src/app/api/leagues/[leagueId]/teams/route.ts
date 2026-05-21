@@ -8,23 +8,22 @@ import {
 import {
   buildWhatsappE164,
   newTeamFormFieldsSchema,
-} from "@/components/dashboard/leagues/new-team-form-schema";
+} from "@/schemas/dashboard/new-team-form-schema";
 import { getDb } from "@/db/client";
 import { teams } from "@/db/schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+} from "@/lib/api";
 import { createTeamInLeague, type TeamRegistrationContacts } from "@/logic/leagues/create-team-in-league";
 import {
   leagueShieldStorageBucket,
   uploadTeamCrestAndSetUrl,
 } from "@/logic/leagues/upload-team-crest";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /**
  * POST — registrar equipo en una liga del dueño (`teams` + `season_teams` con categoría y contactos en metadata).
@@ -40,16 +39,10 @@ export async function POST(
       return NextResponse.json({ error: "Liga no válida" }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
 
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
     const form = await request.formData();
 
     const parsedFields = newTeamFormFieldsSchema.safeParse({
@@ -66,14 +59,7 @@ export async function POST(
     });
 
     if (!parsedFields.success) {
-      const errors: Record<string, string> = {};
-      for (const issue of parsedFields.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && errors[seg] === undefined) {
-          errors[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields: errors }, { status: 400 });
+      return validationErrorFromZod(parsedFields.error);
     }
 
     const d = parsedFields.data;
@@ -151,7 +137,7 @@ export async function POST(
       const bytes = new Uint8Array(await crestEntry.arrayBuffer());
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
-      const storageClient = service ?? supabase;
+      const storageClient = service ?? (await createClient());
       try {
         await uploadTeamCrestAndSetUrl(storageClient, {
           bucket,

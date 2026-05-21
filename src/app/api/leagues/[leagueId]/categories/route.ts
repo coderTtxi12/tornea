@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { newLeagueCategoryJsonSchema } from "@/components/dashboard/leagues/new-league-category-form-schema";
+import { requireAppUser, validationErrorFromZod } from "@/lib/api";
+import { newLeagueCategoryJsonSchema } from "@/schemas/dashboard/new-league-category-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { createLeagueCategoryWithIdempotency } from "@/logic/leagues/create-league-category-with-idempotency";
-import { createClient } from "@/lib/supabase/server";
 
 function readIdempotencyKey(request: Request): string | null {
   const raw =
@@ -37,14 +36,9 @@ export async function POST(
       );
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
 
     let bodyJson: unknown;
     try {
@@ -55,20 +49,8 @@ export async function POST(
 
     const parsed = newLeagueCategoryJsonSchema.safeParse(bodyJson);
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const key = issue.path[0];
-        if (typeof key === "string" && fields[key] === undefined) {
-          fields[key] = issue.message;
-        }
-      }
-      return NextResponse.json(
-        { error: "Revisá los datos del formulario.", fields },
-        { status: 400 },
-      );
+      return validationErrorFromZod(parsed.error);
     }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
 
     const payload = {
       name: parsed.data.name,

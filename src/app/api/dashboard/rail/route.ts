@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { requireAppUser } from "@/lib/api";
 import { listRecentAppAuditLogsForLeagues } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { listRailPendingMatches } from "@/logic/dashboard/list-rail-pending-matches";
 import { listManagedLeagueIdsForDashboardUser } from "@/logic/leagues/league-dashboard-admin";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 /** Límite de filas para actividad reciente y pendientes en el rail (mismo tamaño de batch). */
 export const DASHBOARD_RAIL_BATCH_LIMIT = 20;
@@ -67,16 +66,9 @@ function formatRelativeTimeEs(iso: string): string {
  */
 export async function GET() {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const leagueIds = await listManagedLeagueIdsForDashboardUser(appUser.id);
 
     if (leagueIds.length === 0) {

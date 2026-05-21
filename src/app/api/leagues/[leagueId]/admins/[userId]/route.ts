@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { requireAppUser } from "@/lib/api";
+
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { removeLeagueDashboardAdmin } from "@/logic/leagues/remove-league-dashboard-admin";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * DELETE — quita un administrador invitado (`admin`). Solo el superusuario de la liga.
@@ -18,15 +18,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await removeLeagueDashboardAdmin({
       leagueId,
       actorUserId: appUser.id,

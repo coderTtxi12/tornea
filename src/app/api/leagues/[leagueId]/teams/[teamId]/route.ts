@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+  validationErrorResponse,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
@@ -8,10 +15,9 @@ import {
   buildWhatsappE164,
   newTeamFormFieldsSchema,
   teamStatusEnumSchema,
-} from "@/components/dashboard/leagues/new-team-form-schema";
+} from "@/schemas/dashboard/new-team-form-schema";
 import { getDb } from "@/db/client";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { getTeamForOwnerEdit } from "@/logic/leagues/get-team-for-owner-edit";
 import { resolveSupabaseStorageUrlForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
@@ -21,13 +27,8 @@ import {
 } from "@/logic/leagues/upload-team-crest";
 import { updateTeamForOwner } from "@/logic/leagues/update-team-for-owner";
 import type { TeamRegistrationContacts } from "@/logic/leagues/create-team-in-league";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /**
  * GET — equipo + inscripción y contactos para edición (solo dueño de la liga).
@@ -42,16 +43,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await getTeamForOwnerEdit(appUser.id, leagueId, teamId);
 
     if (result === "FORBIDDEN") {
@@ -89,16 +83,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsedFields = newTeamFormFieldsSchema.safeParse({
@@ -117,21 +104,11 @@ export async function PATCH(
     const parsedStatus = teamStatusEnumSchema.safeParse(readFormString(form, "teamStatus"));
 
     if (!parsedFields.success) {
-      const errors: Record<string, string> = {};
-      for (const issue of parsedFields.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && errors[seg] === undefined) {
-          errors[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields: errors }, { status: 400 });
+      return validationErrorFromZod(parsedFields.error);
     }
 
     if (!parsedStatus.success) {
-      return NextResponse.json(
-        { error: "Validación", fields: { teamStatus: "Estado no válido." } },
-        { status: 400 },
-      );
+      return validationErrorResponse({ teamStatus: "Estado no válido." });
     }
 
     const d = parsedFields.data;
@@ -215,7 +192,7 @@ export async function PATCH(
       const bytes = new Uint8Array(await crestEntry.arrayBuffer());
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
-      const storageClient = service ?? supabase;
+      const storageClient = service ?? (await createClient());
       const storageOwner = await getLeagueOwnerUserId(getDb(), leagueId);
       if (!storageOwner) {
         return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });

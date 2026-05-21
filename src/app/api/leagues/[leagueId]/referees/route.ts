@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorResponse,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   PLAYER_CURP_MAX_FILE_BYTES,
@@ -7,9 +13,8 @@ import {
   PLAYER_PHOTO_MAX_FILE_BYTES,
   PLAYER_PHOTO_MIME_TYPES,
 } from "@/components/dashboard/leagues/new-player-file-constraints";
-import { parseNewLeagueRefereeForm } from "@/components/dashboard/leagues/new-league-referee-form-schema";
+import { parseNewLeagueRefereeForm } from "@/schemas/dashboard/new-league-referee-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import {
   createLeagueReferee,
   deleteLeagueRefereeById,
@@ -21,13 +26,8 @@ import {
   uploadLeagueRefereePhoto,
 } from "@/logic/leagues/upload-league-referee-photo";
 import { tryRemovePlayerFiles } from "@/logic/players/upload-player-files";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /**
  * POST — alta de árbitro de contacto (`league_referees`).
@@ -43,15 +43,9 @@ export async function POST(
       return NextResponse.json({ error: "Liga no válida" }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsed = parseNewLeagueRefereeForm({
@@ -63,7 +57,7 @@ export async function POST(
       notes: readFormString(form, "notes"),
     });
     if (!parsed.ok) {
-      return NextResponse.json({ error: "Validación", fields: parsed.fields }, { status: 400 });
+      return validationErrorResponse(parsed.fields);
     }
 
     const d = parsed.data;
@@ -146,7 +140,7 @@ export async function POST(
     if (filesToUpload.length > 0) {
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
-      const storageClient = service ?? supabase;
+      const storageClient = service ?? (await createClient());
       const uploadedPaths: string[] = [];
       const metadataPatch: Record<string, unknown> = {};
 

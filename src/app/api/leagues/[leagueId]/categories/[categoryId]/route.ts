@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { newLeagueCategoryJsonSchema } from "@/components/dashboard/leagues/new-league-category-form-schema";
+import { requireAppUser, validationErrorFromZod } from "@/lib/api";
+
+import { newLeagueCategoryJsonSchema } from "@/schemas/dashboard/new-league-category-form-schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getLeagueCategoryForOwnerEdit } from "@/logic/leagues/get-league-category-for-owner-edit";
 import { updateLeagueCategoryForOwner } from "@/logic/leagues/update-league-category-for-owner";
-import { createClient } from "@/lib/supabase/server";
-
 /**
  * GET — categoría para edición (solo dueño o admin del panel).
  */
@@ -20,15 +19,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await getLeagueCategoryForOwnerEdit(appUser.id, leagueId, categoryId);
 
     if (result === "FORBIDDEN") {
@@ -58,13 +51,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
 
     let bodyJson: unknown;
     try {
@@ -75,20 +64,9 @@ export async function PATCH(
 
     const parsed = newLeagueCategoryJsonSchema.safeParse(bodyJson);
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const key = issue.path[0];
-        if (typeof key === "string" && fields[key] === undefined) {
-          fields[key] = issue.message;
-        }
-      }
-      return NextResponse.json(
-        { error: "Revisá los datos del formulario.", fields },
-        { status: 400 },
-      );
+      return validationErrorFromZod(parsed.error);
     }
 
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
     const payload = {
       name: parsed.data.name,
       gender: parsed.data.gender,

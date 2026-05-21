@@ -1,5 +1,7 @@
 This is **Tornea**, a [Next.js](https://nextjs.org) app: UI plus server-rendered pages under `src/app`, business logic in `src/logic`, and Postgres access in `src/db` (via [`pg`](https://node-postgres.com)).
 
+**Architecture:** see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/DATABASE.md`](docs/DATABASE.md).
+
 ## Setup
 
 Copy [.env.example](.env.example) to `.env.development.local` and set `DATABASE_URL`. Omit it if you only want to run without a database (health checks report `skipped`).

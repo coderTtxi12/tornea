@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   PLAYER_CURP_MAX_FILE_BYTES,
@@ -11,10 +17,9 @@ import {
   newPlayerFormFieldsSchema,
   parseOptionalDocIdCurp,
   parseOptionalShirtNumber,
-} from "@/components/dashboard/leagues/new-player-form-schema";
+} from "@/schemas/dashboard/new-player-form-schema";
 import { getDb } from "@/db/client";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getLeagueOwnerUserId } from "@/logic/leagues/league-dashboard-admin";
 import { mergePlayerMetadata } from "@/logic/players/create-player-in-team";
 import { getPlayerForOwnerEdit } from "@/logic/players/get-player-for-owner-edit";
@@ -22,14 +27,9 @@ import { tryRemovePlayerFiles, uploadPlayerFile } from "@/logic/players/upload-p
 import { updatePlayerForOwner } from "@/logic/players/update-player-for-owner";
 import { leagueShieldStorageBucket } from "@/logic/leagues/upload-league-shield";
 import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { splitE164ToCountryAndNational } from "@/lib/phone/e164-split";
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 /**
  * GET — jugador + plantilla en temporada objetivo (solo dueño de la liga).
@@ -44,15 +44,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await getPlayerForOwnerEdit(appUser.id, leagueId, teamId, playerId);
 
     if (result === "FORBIDDEN") {
@@ -114,15 +108,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsed = newPlayerFormFieldsSchema.safeParse({
@@ -137,14 +125,7 @@ export async function PATCH(
       docId: readFormString(form, "docId"),
     });
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && fields[seg] === undefined) {
-          fields[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields }, { status: 400 });
+      return validationErrorFromZod(parsed.error);
     }
 
     const data = parsed.data;
@@ -233,7 +214,7 @@ export async function PATCH(
     if (filesToUpload.length > 0) {
       const bucket = leagueShieldStorageBucket();
       const service = createServiceRoleClient();
-      const storageClient = service ?? supabase;
+      const storageClient = service ?? (await createClient());
       const storageOwner = await getLeagueOwnerUserId(getDb(), leagueId);
       if (!storageOwner) {
         return NextResponse.json({ error: "Liga no encontrada." }, { status: 404 });

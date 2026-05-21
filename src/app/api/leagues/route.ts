@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import {
+  readFormString,
+  requireAppUser,
+  validationErrorFromZod,
+} from "@/lib/api";
+import { createClient } from "@/lib/supabase/server";
 
-import { newLeagueTextFieldsSchema } from "@/components/dashboard/leagues/new-league-form-schema";
+import { newLeagueTextFieldsSchema } from "@/schemas/dashboard/new-league-form-schema";
 import {
   LEAGUE_SHIELD_MAX_FILE_BYTES,
   LEAGUE_SHIELD_MIME_TYPES,
@@ -9,7 +15,6 @@ import {
 import { getDb } from "@/db/client";
 import { leagueCategories } from "@/db/schema";
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import {
   createLeagueWithIdempotency,
   type CreatedLeagueSummary,
@@ -21,7 +26,6 @@ import {
   leagueShieldStorageBucket,
   uploadLeagueShieldAndMergeBranding,
 } from "@/logic/leagues/upload-league-shield";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
@@ -87,10 +91,6 @@ function readIdempotencyKey(request: Request): string | null {
   return key;
 }
 
-function readFormString(form: FormData, name: string): string {
-  const v = form.get(name);
-  return typeof v === "string" ? v : "";
-}
 
 async function recordLeagueCreateAudit(
   appUserId: string,
@@ -157,16 +157,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const form = await request.formData();
 
     const parsedFields = newLeagueTextFieldsSchema.safeParse({
@@ -179,14 +172,7 @@ export async function POST(request: Request) {
     });
 
     if (!parsedFields.success) {
-      const errors: Record<string, string> = {};
-      for (const issue of parsedFields.error.issues) {
-        const seg = issue.path[0];
-        if (typeof seg === "string" && errors[seg] === undefined) {
-          errors[seg] = issue.message;
-        }
-      }
-      return NextResponse.json({ error: "Validación", fields: errors }, { status: 400 });
+      return validationErrorFromZod(parsedFields.error);
     }
 
     const shieldEntry = form.get("shield");
@@ -222,7 +208,7 @@ export async function POST(request: Request) {
 
     const bucket = leagueShieldStorageBucket();
     const service = createServiceRoleClient();
-    const storageClient = service ?? supabase;
+    const storageClient = service ?? (await createClient());
 
     if (!replay && shieldBytes && shieldContentType) {
       try {

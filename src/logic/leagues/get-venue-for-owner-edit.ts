@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import {
   parseVenueMetadataForEditForm,
   type VenueSurfacePreset,
-} from "@/components/dashboard/leagues/new-venue-form-schema";
+} from "@/schemas/dashboard/new-venue-form-schema";
 import { getDb } from "@/db/client";
 import { leagues, venues } from "@/db/schema";
 

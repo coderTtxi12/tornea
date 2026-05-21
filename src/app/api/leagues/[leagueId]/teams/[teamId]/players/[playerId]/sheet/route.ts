@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
+import { requireAppUser } from "@/lib/api";
+
 import { getPlayerDashboardSheet } from "@/logic/players/get-player-dashboard-sheet";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
  * GET — ficha técnica del jugador + estadísticas en la liga (solo dueño).
@@ -17,15 +17,9 @@ export async function GET(
       return NextResponse.json({ error: "Parámetros inválidos." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const result = await getPlayerDashboardSheet(appUser.id, leagueId, teamId, playerId);
 
     if (result === "FORBIDDEN") {

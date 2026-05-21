@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+
+import { requireAppUser, validationErrorFromZod } from "@/lib/api";
 import { z } from "zod";
 
 import { AppAuditEntityType, recordAppAuditLog } from "@/logic/audit";
-import { syncAppUserFromSupabaseAuthUser } from "@/logic/auth/dashboard-access";
 import { getDb } from "@/db/client";
 import { addLeagueDashboardAdminByEmail } from "@/logic/leagues/add-league-dashboard-admin-by-email";
 import {
@@ -10,7 +11,6 @@ import {
   userIsLeagueSuperuser,
 } from "@/logic/leagues/league-dashboard-admin";
 import { listLeagueDashboardAdmins } from "@/logic/leagues/list-league-dashboard-admins";
-import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 const postBodySchema = z.object({
   email: z.string().trim().min(3).email("Correo no válido."),
@@ -29,15 +29,9 @@ export async function GET(
       return NextResponse.json({ error: "Liga no válida." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     const db = getDb();
     if (!(await userCanManageLeague(db, leagueId, appUser.id))) {
       return NextResponse.json({ error: "No tenés permiso." }, { status: 403 });
@@ -72,15 +66,9 @@ export async function POST(
       return NextResponse.json({ error: "Liga no válida." }, { status: 400 });
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    const appUser = await syncAppUserFromSupabaseAuthUser(user);
+    const auth = await requireAppUser();
+    if (!auth.ok) return auth.response;
+    const { appUser } = auth.ctx;
     let body: unknown;
     try {
       body = await request.json();
@@ -90,8 +78,7 @@ export async function POST(
 
     const parsed = postBodySchema.safeParse(body);
     if (!parsed.success) {
-      const msg = parsed.error.issues[0]?.message ?? "Datos inválidos.";
-      return NextResponse.json({ error: msg }, { status: 400 });
+      return validationErrorFromZod(parsed.error);
     }
 
     const email = parsed.data.email.trim().toLowerCase();

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 
 import { and, eq, sql } from "drizzle-orm";
 
-import type { NewLeagueTextFields } from "@/components/dashboard/leagues/new-league-form-schema";
+import type { NewLeagueTextFields } from "@/schemas/dashboard/new-league-form-schema";
 import { getDb } from "@/db/client";
 import {
   leagueCategories,
