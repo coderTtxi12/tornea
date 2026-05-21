@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DashboardArenaLayout } from "@/components/dashboard/DashboardArenaLayout";
@@ -12,6 +12,7 @@ import type {
   MyLeaguesTeamRow,
   MyLeaguesVenueRow,
 } from "@/components/dashboard/leagues/my-leagues-state";
+import { dashboardNavKeyFromPathname } from "@/components/dashboard/nav/dashboard-routes";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createClient, isSupabaseAuthConfigured } from "@/lib/supabase/client";
 import {
@@ -29,7 +30,10 @@ type LeaguesMyApiResponse = {
   teamsNextCursor?: string | null;
 };
 
-export default function DashboardPage() {
+/** Client shell: auth, myLeagues fetch, layout. Mount once in `(arena)/layout`. */
+export default function DashboardArenaShell() {
+  const pathname = usePathname();
+  const nav = dashboardNavKeyFromPathname(pathname) ?? "home";
   const { user, loading, configured } = useAuth();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
@@ -39,6 +43,12 @@ export default function DashboardPage() {
   const [playersLoadingMore, setPlayersLoadingMore] = useState(false);
   const [teamsLoadingMore, setTeamsLoadingMore] = useState(false);
   const [refetchKey, setRefetchKey] = useState(0);
+
+  useEffect(() => {
+    if (dashboardNavKeyFromPathname(pathname) === null) {
+      router.replace("/dashboard");
+    }
+  }, [pathname, router]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -230,6 +240,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardArenaLayout
+      nav={nav}
       avatarUrl={photo}
       avatarInitial={initial}
       onSignOut={() => void handleSignOut()}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { DASHBOARD_NAV_ITEMS, type DashboardNavKey } from "./dashboard-nav-config";
@@ -25,11 +26,10 @@ function MaterialGlyph({
 
 type NavRailProps = {
   active: DashboardNavKey;
-  onNavigate: (key: DashboardNavKey) => void;
   layout: "vertical" | "horizontal";
 };
 
-function DashboardNavRail({ active, onNavigate, layout }: NavRailProps) {
+function DashboardNavRail({ active, layout }: NavRailProps) {
   const vertical = layout === "vertical";
 
   return (
@@ -41,17 +41,16 @@ function DashboardNavRail({ active, onNavigate, layout }: NavRailProps) {
       }
       aria-label="Navegación principal del dashboard"
     >
-      {DASHBOARD_NAV_ITEMS.map(({ key, label, symbol }) => {
+      {DASHBOARD_NAV_ITEMS.map(({ key, href, label, symbol }) => {
         const isActive = active === key;
         return (
-          <button
+          <Link
             key={key}
-            type="button"
+            href={href}
             data-dashboard-nav={key}
             title={label}
             aria-label={label}
             aria-current={isActive ? "page" : undefined}
-            onClick={() => onNavigate(key)}
             className={`group relative flex shrink-0 items-center justify-center rounded-full outline-none transition-[background-color,transform] duration-200 ease-out hover:bg-white/12 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tornea-blue)] active:scale-95 motion-reduce:transition-none motion-reduce:hover:transform-none ${
               vertical ? "size-11 sm:size-12" : "size-10"
             }`}
@@ -65,7 +64,7 @@ function DashboardNavRail({ active, onNavigate, layout }: NavRailProps) {
                   : "text-[23px] motion-safe:group-hover:scale-110 motion-safe:group-hover:drop-shadow-[0_0_8px_color-mix(in_srgb,white_35%,transparent)]"
               }
             />
-          </button>
+          </Link>
         );
       })}
     </nav>
@@ -74,18 +73,11 @@ function DashboardNavRail({ active, onNavigate, layout }: NavRailProps) {
 
 type DashboardNavSidebarProps = {
   active: DashboardNavKey;
-  onNavigate: (key: DashboardNavKey) => void;
 };
 
 const SCROLL_STEP_PX = 120;
 
-function SidebarPill({
-  active,
-  onNavigate,
-}: {
-  active: DashboardNavKey;
-  onNavigate: (key: DashboardNavKey) => void;
-}) {
+function SidebarPill({ active }: { active: DashboardNavKey }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
   const [canScrollUp, setCanScrollUp] = useState(false);
@@ -153,7 +145,7 @@ function SidebarPill({
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(255,255,255,0.35)_transparent] [scrollbar-width:thin]"
       >
-        <DashboardNavRail active={active} onNavigate={onNavigate} layout="vertical" />
+        <DashboardNavRail active={active} layout="vertical" />
       </div>
       {overflow ? (
         <button
@@ -173,7 +165,7 @@ function SidebarPill({
 }
 
 /** Columna izquierda: rail fijo a altura de viewport, píldora azul centrada (tema Tornea). */
-export function DashboardNavSidebar({ active, onNavigate }: DashboardNavSidebarProps) {
+export function DashboardNavSidebar({ active }: DashboardNavSidebarProps) {
   return (
     <aside
       className="border-border bg-background sticky top-0 z-30 hidden h-dvh w-[4.25rem] shrink-0 flex-col items-center justify-center self-start border-r sm:flex sm:w-[4.5rem]"
@@ -182,22 +174,21 @@ export function DashboardNavSidebar({ active, onNavigate }: DashboardNavSidebarP
         paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))",
       }}
     >
-      <SidebarPill active={active} onNavigate={onNavigate} />
+      <SidebarPill active={active} />
     </aside>
   );
 }
 
 type DashboardNavPillMobileProps = {
   active: DashboardNavKey;
-  onNavigate: (key: DashboardNavKey) => void;
 };
 
 /** Barra horizontal compacta (solo móvil). */
-export function DashboardNavPillMobile({ active, onNavigate }: DashboardNavPillMobileProps) {
+export function DashboardNavPillMobile({ active }: DashboardNavPillMobileProps) {
   return (
     <div className="border-border flex justify-center border-b bg-background py-2.5 sm:hidden">
       <div className="rounded-full bg-brand-blue">
-        <DashboardNavRail active={active} onNavigate={onNavigate} layout="horizontal" />
+        <DashboardNavRail active={active} layout="horizontal" />
       </div>
     </div>
   );

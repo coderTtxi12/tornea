@@ -28,6 +28,7 @@ import {
 import { DashboardViewSwitch } from "./views";
 
 export type DashboardArenaLayoutProps = {
+  nav: DashboardNavKey;
   avatarUrl: string | null;
   avatarInitial: string;
   onSignOut: () => void;
@@ -147,6 +148,7 @@ function HeaderSearchShortcut({ mode }: { mode: "mac" | "other" | null }) {
 }
 
 export function DashboardArenaLayout({
+  nav,
   avatarUrl,
   avatarInitial,
   onSignOut,
@@ -160,7 +162,6 @@ export function DashboardArenaLayout({
   onLoadMoreTeams,
   teamsLoadingMore,
 }: DashboardArenaLayoutProps) {
-  const [nav, setNav] = useState<DashboardNavKey>("home");
   const [drawer, setDrawer] = useState<RightDrawerState>({ kind: "closed" });
   const [leagueFormKey, setLeagueFormKey] = useState(0);
   const [categoryFormKey, setCategoryFormKey] = useState(0);
@@ -264,7 +265,7 @@ export function DashboardArenaLayout({
         paddingRight: "env(safe-area-inset-right)",
       }}
     >
-      <DashboardNavSidebar active={nav} onNavigate={setNav} />
+      <DashboardNavSidebar active={nav} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <header
@@ -328,7 +329,7 @@ export function DashboardArenaLayout({
           </div>
         </header>
 
-        <DashboardNavPillMobile active={nav} onNavigate={setNav} />
+        <DashboardNavPillMobile active={nav} />
 
         <div className="bg-background flex min-h-0 flex-1">
           <main className="min-h-0 flex-1 overflow-y-auto bg-background px-3 py-5 sm:px-5 lg:px-6 lg:py-8">

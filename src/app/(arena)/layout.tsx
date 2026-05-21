@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
+import DashboardArenaShell from "@/components/dashboard/DashboardArenaShell";
 import {
   syncAppUserFromSupabaseAuthUser,
   userRowHasDashboardAccess,
 } from "@/logic/auth/dashboard-access";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function DashboardLayout({
+/** Rutas del panel operador: auth + acceso al dashboard. */
+export default async function ArenaLayout({
   children,
 }: {
   children: ReactNode;
@@ -26,5 +28,10 @@ export default async function DashboardLayout({
     redirect("/solicitar-acceso");
   }
 
-  return children;
+  return (
+    <>
+      <DashboardArenaShell />
+      {children}
+    </>
+  );
 }

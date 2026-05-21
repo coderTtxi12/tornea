@@ -45,3 +45,6 @@ next-env.d.ts
 /docs/BRANDING.md
 /docs/COMMIT_FORMAT.md
 /docs/AUDIT_LOGS.md
+
+# cursor
+/.cursor/
