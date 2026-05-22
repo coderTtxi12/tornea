@@ -6,7 +6,6 @@ import {
   Flag,
   ListOrdered,
   ShieldAlert,
-  Target,
 } from "lucide-react";
 
 import type { MatchOperationsBundle } from "./match-operations-types";
@@ -19,9 +18,32 @@ type FeedItem = {
   minute: number | null;
   label: string;
   detail?: string;
+  teamLabel: string;
+  createdAt: string;
 };
 
-function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
+function formatEventTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+function teamLabelForId(bundle: MatchOperationsBundle, teamId: string): string {
+  if (teamId === bundle.match.homeTeamId) return `${bundle.match.homeTeamName} · Local`;
+  if (teamId === bundle.match.awayTeamId) return `${bundle.match.awayTeamName} · Visitante`;
+  return "Equipo";
+}
+
+export function buildIncidentFeedItems(bundle: MatchOperationsBundle): FeedItem[] {
   const items: FeedItem[] = [];
 
   for (const g of bundle.goals) {
@@ -33,6 +55,8 @@ function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
       detail: [g.scorerName, g.assistName ? `asist. ${g.assistName}` : null]
         .filter(Boolean)
         .join(" · "),
+      teamLabel: teamLabelForId(bundle, g.teamId),
+      createdAt: g.createdAt,
     });
   }
   for (const c of bundle.cards) {
@@ -47,6 +71,8 @@ function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
             ? "2.ª amarilla"
             : "Amarilla",
       detail: c.playerName ?? undefined,
+      teamLabel: teamLabelForId(bundle, c.teamId),
+      createdAt: c.createdAt,
     });
   }
   for (const s of bundle.substitutions) {
@@ -56,6 +82,8 @@ function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
       minute: s.minute,
       label: "Cambio",
       detail: `${s.playerOutName} → ${s.playerInName}`,
+      teamLabel: teamLabelForId(bundle, s.teamId),
+      createdAt: s.createdAt,
     });
   }
   for (const f of bundle.fouls) {
@@ -65,6 +93,8 @@ function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
       minute: f.minute,
       label: "Falta",
       detail: f.offendingPlayerName ?? undefined,
+      teamLabel: teamLabelForId(bundle, f.offendingTeamId),
+      createdAt: f.createdAt,
     });
   }
   for (const p of bundle.penalties) {
@@ -74,14 +104,15 @@ function buildFeed(bundle: MatchOperationsBundle): FeedItem[] {
       minute: p.minute,
       label: "Penalti",
       detail: `${p.takerName ?? "—"} (${p.outcome})`,
+      teamLabel: teamLabelForId(bundle, p.teamId),
+      createdAt: p.createdAt,
     });
   }
 
-  return items.sort((a, b) => (b.minute ?? 0) - (a.minute ?? 0));
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 const ICONS = {
-  goal: Target,
   card: ShieldAlert,
   sub: ArrowLeftRight,
   foul: Flag,
@@ -97,7 +128,7 @@ const ICON_TONES: Record<string, string> = {
 };
 
 export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle }) {
-  const items = buildFeed(bundle);
+  const items = buildIncidentFeedItems(bundle);
 
   return (
     <LivePanelShell>
@@ -118,21 +149,38 @@ export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle })
             {items.map((item) => {
               const Icon = ICONS[item.kind as keyof typeof ICONS] ?? CircleDot;
               const tone = ICON_TONES[item.kind] ?? ICON_TONES.foul;
+              const isGoal = item.kind === "goal";
               return (
                 <li
                   key={item.id}
-                  className="border-border flex cursor-default items-start gap-3 rounded-brand-md border bg-background-muted/25 px-3 py-2.5 text-sm transition-colors duration-200"
+                  className="border-border flex cursor-default items-center gap-3 rounded-brand-lg border bg-background-muted/20 px-3 py-3 text-sm transition-colors duration-200"
                 >
                   <span
-                    className={`flex size-8 shrink-0 items-center justify-center rounded-brand-md ${tone}`}
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone}`}
                   >
-                    <Icon className="size-4" aria-hidden />
+                    {isGoal ? (
+                      <span className="text-base leading-none" aria-hidden>
+                        ⚽
+                      </span>
+                    ) : (
+                      <Icon className="size-4" aria-hidden />
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium">{item.label}</span>
-                    {item.detail ? (
-                      <p className="text-foreground-muted truncate text-xs">{item.detail}</p>
-                    ) : null}
+                    <span className="font-semibold">{item.label}</span>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-brand-teal truncate text-xs font-semibold">
+                        {item.teamLabel}
+                      </span>
+                      {item.detail ? (
+                        <span className="text-foreground-muted truncate text-xs">
+                          {item.detail}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-foreground-subtle mt-0.5 text-[10px] font-medium">
+                      {formatEventTime(item.createdAt)}
+                    </p>
                   </div>
                   {item.minute != null ? (
                     <MockBadge tone="lime">{item.minute}′</MockBadge>

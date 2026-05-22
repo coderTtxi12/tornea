@@ -118,9 +118,39 @@ export function mergeMatchOperationsIntoReport(
 }
 
 export function initialClockForKickoff(): MatchClockState {
+  const now = new Date().toISOString();
   return {
     ...DEFAULT_CLOCK,
     isPaused: false,
-    periodStartedAt: new Date().toISOString(),
+    periodStartedAt: now,
+  };
+}
+
+export function effectiveMatchClock(
+  clock: MatchClockState | null,
+  now: Date = new Date(),
+): MatchClockState | null {
+  if (!clock) return null;
+  if (clock.isPaused || !clock.periodStartedAt) {
+    return {
+      ...clock,
+      elapsedSeconds: Math.max(0, Math.floor(clock.elapsedSeconds)),
+    };
+  }
+
+  const startedMs = Date.parse(clock.periodStartedAt);
+  if (Number.isNaN(startedMs)) {
+    return {
+      ...clock,
+      isPaused: true,
+      periodStartedAt: null,
+      elapsedSeconds: Math.max(0, Math.floor(clock.elapsedSeconds)),
+    };
+  }
+
+  const deltaSeconds = Math.max(0, Math.floor((now.getTime() - startedMs) / 1000));
+  return {
+    ...clock,
+    elapsedSeconds: Math.max(0, Math.floor(clock.elapsedSeconds)) + deltaSeconds,
   };
 }

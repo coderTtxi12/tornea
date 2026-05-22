@@ -12,13 +12,18 @@ type LoadState =
 
 export function useMatchOperations(leagueId: string | null, matchId: string | null) {
   const [state, setState] = useState<LoadState>({ status: "idle" });
+  const [refreshing, setRefreshing] = useState(false);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (mode: "initial" | "silent" = "initial") => {
     if (!leagueId || !matchId) {
       setState({ status: "idle" });
       return;
     }
-    setState({ status: "loading" });
+    if (mode === "silent") {
+      setRefreshing(true);
+    } else {
+      setState((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
+    }
     try {
       const res = await fetch(
         `/api/leagues/${leagueId}/matches/${matchId}/operations`,
@@ -39,12 +44,23 @@ export function useMatchOperations(leagueId: string | null, matchId: string | nu
       const bundle = (await res.json()) as MatchOperationsBundle;
       setState({ status: "ready", bundle });
     } catch {
-      setState({ status: "error", message: "Error de red." });
+      if (mode === "silent") {
+        setState((prev) =>
+          prev.status === "ready" ? prev : { status: "error", message: "Error de red." },
+        );
+      } else {
+        setState({ status: "error", message: "Error de red." });
+      }
+    } finally {
+      if (mode === "silent") setRefreshing(false);
     }
   }, [leagueId, matchId]);
 
   useEffect(() => {
-    void reload();
+    const id = window.setTimeout(() => {
+      void reload();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [reload]);
 
   const post = useCallback(
@@ -62,7 +78,7 @@ export function useMatchOperations(leagueId: string | null, matchId: string | nu
       if (!res.ok) {
         return { ok: false as const, error: data.error ?? "Error" };
       }
-      await reload();
+      await reload("silent");
       return { ok: true as const, data };
     },
     [leagueId, matchId, reload],
@@ -83,11 +99,11 @@ export function useMatchOperations(leagueId: string | null, matchId: string | nu
       if (!res.ok) {
         return { ok: false as const, error: data.error ?? "Error" };
       }
-      await reload();
+      await reload("silent");
       return { ok: true as const };
     },
     [leagueId, matchId, reload],
   );
 
-  return { state, reload, post, put };
+  return { state, refreshing, reload, post, put };
 }

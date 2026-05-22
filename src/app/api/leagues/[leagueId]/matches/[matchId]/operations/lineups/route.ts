@@ -16,6 +16,7 @@ const MESSAGES: Record<string, string> = {
   player_both_teams: "Un jugador no puede estar en ambos equipos.",
   too_many_starters: "Demasiados titulares para el máximo en cancha.",
   missing_starters: "Cada equipo necesita al menos un titular.",
+  wrong_starter_count: "Cada equipo debe validar exactamente los titulares requeridos.",
   invalid_phase: "Completa la validación del partido primero.",
 };
 

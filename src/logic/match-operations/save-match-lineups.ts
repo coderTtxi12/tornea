@@ -39,7 +39,8 @@ export type SaveMatchLineupsResult =
         | "player_not_on_roster"
         | "player_both_teams"
         | "too_many_starters"
-        | "missing_starters";
+        | "missing_starters"
+        | "wrong_starter_count";
     };
 
 export async function saveMatchLineups(
@@ -104,17 +105,16 @@ export async function saveMatchLineups(
     slot: e.slot,
   }));
 
-  if (countStarters(lineupsForCount, ctx.homeTeamId) > maxOnField) {
+  const homeStarterCount = countStarters(lineupsForCount, ctx.homeTeamId);
+  const awayStarterCount = countStarters(lineupsForCount, ctx.awayTeamId);
+  if (homeStarterCount > maxOnField || awayStarterCount > maxOnField) {
     return { ok: false, reason: "too_many_starters" };
   }
-  if (countStarters(lineupsForCount, ctx.awayTeamId) > maxOnField) {
-    return { ok: false, reason: "too_many_starters" };
-  }
-  if (countStarters(lineupsForCount, ctx.homeTeamId) < 1) {
+  if (homeStarterCount < 1 || awayStarterCount < 1) {
     return { ok: false, reason: "missing_starters" };
   }
-  if (countStarters(lineupsForCount, ctx.awayTeamId) < 1) {
-    return { ok: false, reason: "missing_starters" };
+  if (homeStarterCount !== maxOnField || awayStarterCount !== maxOnField) {
+    return { ok: false, reason: "wrong_starter_count" };
   }
 
   const homeIds = lineupPlayerIdsForTeam(lineupsForCount, ctx.homeTeamId);

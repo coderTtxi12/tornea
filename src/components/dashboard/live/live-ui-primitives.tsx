@@ -3,21 +3,15 @@
 import { useMemo, type ReactNode } from "react";
 import { Check, MapPin } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
 import {
   BIRTH_DATE_MIN_ISO,
   birthDateMaxIso,
 } from "@/logic/players/birth-date-validation";
 
 import { LiveFormField } from "./live-form-field";
+import { LiveInput } from "./live-form-controls";
 import { formatMatchSchedule } from "./live-match-format";
-import { floatCard } from "../views/dashboard-view-primitives";
-
-export const liveInputClass =
-  "mt-1.5 w-full rounded-brand-md border border-border bg-background-muted/60 px-3 py-2.5 text-sm text-foreground transition-colors duration-200 placeholder:text-foreground-subtle focus:border-brand-teal/50 focus:outline-none focus:ring-2 focus:ring-brand-teal/25";
-
-export const liveSelectClass =
-  "cursor-pointer rounded-brand-md border border-border bg-background-muted/60 px-3 py-2.5 text-sm text-foreground transition-colors duration-200 focus:border-brand-teal/50 focus:outline-none focus:ring-2 focus:ring-brand-teal/25";
+import { LIVE_PANEL_CLASS } from "./live-field-styles";
 
 export function LivePanelShell({
   children,
@@ -27,7 +21,11 @@ export function LivePanelShell({
   className?: string;
 }) {
   return (
-    <div className={`${floatCard} overflow-hidden ${className}`}>{children}</div>
+    <div
+      className={`overflow-hidden rounded-brand-lg border ${LIVE_PANEL_CLASS} ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -43,18 +41,18 @@ export function LiveSectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="border-border flex flex-wrap items-start justify-between gap-3 border-b bg-background-muted/30 px-5 py-4 sm:px-6">
+    <div className="border-border flex flex-wrap items-start justify-between gap-3 border-b bg-background px-4 py-4 sm:px-5">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           {icon ? (
-            <span className="bg-brand-teal/15 text-brand-teal flex size-8 shrink-0 items-center justify-center rounded-brand-md">
+            <span className="bg-brand-teal/10 text-brand-teal flex size-8 shrink-0 items-center justify-center rounded-full">
               {icon}
             </span>
           ) : null}
-          <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+          <h3 className="text-[0.95rem] font-semibold tracking-tight">{title}</h3>
         </div>
         {description ? (
-          <p className="text-foreground-muted mt-1 max-w-xl text-sm leading-relaxed">
+          <p className="text-foreground-muted mt-1 max-w-xl text-xs leading-relaxed sm:text-sm">
             {description}
           </p>
         ) : null}
@@ -65,7 +63,7 @@ export function LiveSectionHeader({
 }
 
 export function LiveSectionBody({ children }: { children: ReactNode }) {
-  return <div className="p-5 sm:p-6">{children}</div>;
+  return <div className="p-4 sm:p-5">{children}</div>;
 }
 
 const STEPS = [
@@ -76,7 +74,7 @@ const STEPS = [
 
 export function LivePhaseStepper({ activeIndex }: { activeIndex: number }) {
   return (
-    <div className="border-border border-t bg-surface-card/50 px-4 py-4 sm:px-6">
+    <div className="border-border border-t bg-background px-4 py-4 sm:px-6">
       <ol className="flex items-center gap-0">
         {STEPS.map((step, i) => {
           const done = i < activeIndex;
@@ -144,27 +142,19 @@ export function LiveMatchHeader({
 }) {
   const scheduleLabel = scheduledAt ? formatMatchSchedule(scheduledAt) : null;
   return (
-    <div className={`${floatCard} overflow-hidden`}>
-      <div className="bg-gradient-night relative px-5 py-6 sm:px-8 sm:py-7">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          aria-hidden
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 0%, color-mix(in srgb, var(--tornea-teal) 22%, transparent), transparent)",
-          }}
-        />
-        <div className="relative flex flex-wrap items-start justify-between gap-3">
+    <div className={`overflow-hidden rounded-brand-lg border ${LIVE_PANEL_CLASS}`}>
+      <div className="relative px-4 py-4 sm:px-5">
+        <div className="relative flex items-start justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {statusBadge}
             {clockLabel ? (
-              <span className="text-foreground-muted rounded-full border border-border bg-surface-card/80 px-3 py-1 text-xs font-medium tabular-nums">
+              <span className="text-foreground-muted rounded-full border border-border bg-background-muted/45 px-2.5 py-1 text-xs font-medium tabular-nums">
                 {clockLabel}
               </span>
             ) : null}
           </div>
           {categoryName || scheduleLabel ? (
-            <div className="min-w-0 text-right text-xs leading-relaxed">
+            <div className="min-w-0 text-right text-[11px] leading-relaxed sm:text-xs">
               {categoryName ? (
                 <p className="text-brand-teal font-semibold">{categoryName}</p>
               ) : null}
@@ -174,29 +164,29 @@ export function LiveMatchHeader({
             </div>
           ) : null}
         </div>
-        <div className="relative mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-center">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold leading-tight sm:text-xl">{homeName}</p>
-            <p className="text-brand-teal/90 mt-0.5 text-[11px] font-semibold uppercase tracking-wider">
+        <div className="relative mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-center">
+          <div className="min-w-0 text-left">
+            <p className="truncate text-base font-semibold leading-tight sm:text-lg">{homeName}</p>
+            <p className="text-brand-teal/80 mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
               Local
             </p>
           </div>
-          <div className="px-2">
-            <p className="text-4xl font-black tabular-nums tracking-tight sm:text-5xl">
+          <div className="rounded-brand-lg border border-border bg-background-muted/30 px-3 py-2">
+            <p className="text-3xl font-black tabular-nums tracking-tight sm:text-4xl">
               <span className="text-brand-lime">{homeScore}</span>
-              <span className="text-foreground-muted mx-2 font-semibold">–</span>
+              <span className="text-foreground-muted mx-1.5 font-semibold">–</span>
               <span className="text-brand-lime">{awayScore}</span>
             </p>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold leading-tight sm:text-xl">{awayName}</p>
-            <p className="text-brand-teal/90 mt-0.5 text-[11px] font-semibold uppercase tracking-wider">
+          <div className="min-w-0 text-right">
+            <p className="truncate text-base font-semibold leading-tight sm:text-lg">{awayName}</p>
+            <p className="text-brand-teal/80 mt-0.5 text-[10px] font-semibold uppercase tracking-wide">
               Visitante
             </p>
           </div>
         </div>
         {venueName ? (
-          <p className="text-foreground-muted relative mt-4 flex items-center justify-center gap-1.5 text-xs">
+          <p className="text-foreground-muted relative mt-3 flex items-center justify-center gap-1.5 text-xs">
             <MapPin className="text-brand-teal size-3.5 shrink-0" aria-hidden />
             {venueName}
           </p>
@@ -282,7 +272,7 @@ export function LiveBirthDateField({
 
   return (
     <LiveFormField label="Fecha de nacimiento" htmlFor={id} error={error}>
-      <Input
+      <LiveInput
         id={id}
         type="date"
         name="birthDate"

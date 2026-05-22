@@ -30,3 +30,25 @@ export function operationsPhaseToWizardStep(
   if (phase === "lineups" || phase === "ready") return 3;
   return 4;
 }
+
+type LiveCourtFullscreenListener = () => void;
+
+let liveCourtFullscreenOpen = false;
+const liveCourtFullscreenListeners = new Set<LiveCourtFullscreenListener>();
+
+export function getLiveCourtFullscreenOpen(): boolean {
+  return liveCourtFullscreenOpen;
+}
+
+export function setLiveCourtFullscreenOpen(next: boolean): void {
+  if (liveCourtFullscreenOpen === next) return;
+  liveCourtFullscreenOpen = next;
+  for (const listener of liveCourtFullscreenListeners) listener();
+}
+
+export function subscribeLiveCourtFullscreen(listener: LiveCourtFullscreenListener): () => void {
+  liveCourtFullscreenListeners.add(listener);
+  return () => {
+    liveCourtFullscreenListeners.delete(listener);
+  };
+}

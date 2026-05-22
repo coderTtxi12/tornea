@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+
+import {
+  getLiveCourtFullscreenOpen,
+  subscribeLiveCourtFullscreen,
+} from "@/components/dashboard/live/live-wizard-config";
 
 import type { MyLeaguesMatchRow } from "@/components/dashboard/leagues/my-leagues-state";
 
@@ -239,6 +244,11 @@ export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
   const [railError, setRailError] = useState<string | null>(null);
   const [upcomingState, setUpcomingState] = useState<UpcomingState>({ status: "idle" });
   const [narrowSheetOpen, setNarrowSheetOpen] = useState(false);
+  const liveCourtFullscreen = useSyncExternalStore(
+    subscribeLiveCourtFullscreen,
+    getLiveCourtFullscreenOpen,
+    () => false,
+  );
 
   const closeNarrowSheet = useCallback(() => setNarrowSheetOpen(false), []);
 
@@ -365,7 +375,7 @@ export function DashboardRightRail({ refreshKey }: { refreshKey: number }) {
         <DashboardRightRailCard {...cardProps} />
       </aside>
 
-      {!narrowSheetOpen ? (
+      {!narrowSheetOpen && !liveCourtFullscreen ? (
         <div
           className="xl:hidden pointer-events-none fixed inset-0 z-[95]"
           aria-hidden

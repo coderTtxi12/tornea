@@ -78,7 +78,7 @@ export function LiveWizardProgress({
         })}
       </ol>
 
-      <div className="border-border rounded-brand-lg border bg-surface-card/40 px-4 py-3 sm:px-5">
+      <div className="border-border rounded-brand-lg border bg-background px-4 py-3 sm:px-5">
         <p className="text-brand-teal text-[10px] font-bold uppercase tracking-wider">
           Paso {currentStep} de {LIVE_WIZARD_STEPS.length}
         </p>

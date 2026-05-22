@@ -22,7 +22,7 @@
 | Primary actions | `brand-blue` `#2563FF` |
 | Accents / links | `brand-teal` `#00D4C8` |
 | Warnings (5 fouls) | `brand-purple` `#8B5CF6` |
-| Cards / surfaces | `floatCard` / `DASHBOARD_FLOAT_CARD` |
+| Cards / surfaces | `LiveCard` / `LIVE_PANEL_CLASS` — `bg-background` (mismo que inputs) |
 
 ## Typography
 
@@ -31,7 +31,8 @@
 ## Components
 
 - **Header card:** `LiveMatchHeader` — `bg-gradient-night` scoreboard + `LivePhaseStepper` (completed = teal + check; active = lime ring).
-- **Sections:** `LivePanelShell` + `LiveSectionHeader` (teal icon chip) + `LiveSectionBody`; inputs use `liveInputClass` / `liveSelectClass`.
+- **Form fields:** `LiveInput` / `LiveSelect` — pill (`rounded-full`), `bg-background`, foco `ring-brand-teal/40` (mismo patrón que `AccessRequestWizard` en solicitar-acceso). Estilos en `live-field-styles.ts`.
+- **Panels:** `LiveCard` y `LivePanelShell` usan `LIVE_PANEL_CLASS` (`bg-background`) para alinear cajas con los campos.
 - **Lineups:** `SlotToggleGroup` (T = lime, S = teal); starter counter badge; `LiveEmptyRoster` for empty teams.
 - **Sidebar list:** `LiveMatchList` — left border `brand-lime` when selected; `brand-teal` on hover.
 - **Incident toolbar:** `Button` secondary; finish = default blue.

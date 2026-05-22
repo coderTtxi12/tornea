@@ -17,12 +17,16 @@ import {
 
 import { readLeagueCategoryMetadata } from "@/logic/leagues/league-category-metadata";
 import { readMatchReportMetadata } from "@/logic/leagues/match-report-metadata";
+import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabase-storage-url-for-img-display";
 
 import { isMissingRelationError } from "@/lib/db/pg-error-code";
 
 import { computeLiveScoreFromGoals } from "./compute-live-score";
 import { loadMatchForOperations } from "./match-operations-access";
-import { readMatchOperationsMetadata } from "./match-operations-metadata";
+import {
+  effectiveMatchClock,
+  readMatchOperationsMetadata,
+} from "./match-operations-metadata";
 import {
   countTeamFouls,
   deriveOnFieldByTeam,
@@ -64,7 +68,12 @@ export type MatchOperationsBundle = {
   }>;
   rosterByTeam: Record<
     string,
-    Array<{ playerId: string; playerName: string; shirtNumber: number | null }>
+    Array<{
+      playerId: string;
+      playerName: string;
+      shirtNumber: number | null;
+      profileImageUrl: string | null;
+    }>
   >;
   goals: Array<{
     id: string;
@@ -77,6 +86,7 @@ export type MatchOperationsBundle = {
     minute: number | null;
     isOwnGoal: boolean;
     goalKind: string | null;
+    createdAt: string;
   }>;
   cards: Array<{
     id: string;
@@ -86,6 +96,7 @@ export type MatchOperationsBundle = {
     cardKind: string;
     period: string | null;
     minute: number | null;
+    createdAt: string;
   }>;
   substitutions: Array<{
     id: string;
@@ -96,6 +107,7 @@ export type MatchOperationsBundle = {
     playerInName: string;
     period: string | null;
     minute: number | null;
+    createdAt: string;
   }>;
   fouls: Array<{
     id: string;
@@ -105,6 +117,7 @@ export type MatchOperationsBundle = {
     foulKind: string;
     period: string | null;
     minute: number | null;
+    createdAt: string;
   }>;
   penalties: Array<{
     id: string;
@@ -114,6 +127,7 @@ export type MatchOperationsBundle = {
     outcome: string;
     period: string | null;
     minute: number | null;
+    createdAt: string;
   }>;
   onFieldPlayerIds: { home: string[]; away: string[] };
   /** Non-fatal: football detail tables missing until `npm run db:migrate`. */
@@ -150,6 +164,7 @@ export async function getMatchOperationsBundle(
   const db = getDb();
   const reportMeta = readMatchReportMetadata(ctx.report);
   const operations = readMatchOperationsMetadata(ctx.report);
+  operations.clock = effectiveMatchClock(operations.clock);
 
   let categoryName: string | null = null;
   if (ctx.leagueCategoryId) {
@@ -225,6 +240,7 @@ export async function getMatchOperationsBundle(
       playerId: teamRosters.playerId,
       shirtNumber: teamRosters.shirtNumber,
       fullName: players.fullName,
+      metadata: players.metadata,
     })
     .from(teamRosters)
     .innerJoin(players, eq(teamRosters.playerId, players.id))
@@ -357,13 +373,20 @@ export async function getMatchOperationsBundle(
     [ctx.homeTeamId]: [],
     [ctx.awayTeamId]: [],
   };
-  for (const r of rosterRows) {
+  const rosterWithPhotos = await Promise.all(
+    rosterRows.map(async (r) => ({
+      ...r,
+      profileImageUrl: await resolvePlayerPhotoForImgDisplay(r.metadata),
+    })),
+  );
+  for (const r of rosterWithPhotos) {
     const list = rosterByTeam[r.teamId];
     if (!list) continue;
     list.push({
       playerId: r.playerId,
       playerName: r.fullName,
       shirtNumber: r.shirtNumber,
+      profileImageUrl: r.profileImageUrl,
     });
   }
 
@@ -417,6 +440,7 @@ export async function getMatchOperationsBundle(
         minute: g.minute,
         isOwnGoal: g.isOwnGoal,
         goalKind: g.goalKind,
+        createdAt: g.createdAt.toISOString(),
       })),
       cards: cardRows.map((c) => ({
         id: c.id,
@@ -426,6 +450,7 @@ export async function getMatchOperationsBundle(
         cardKind: c.cardKind,
         period: c.period,
         minute: c.minute,
+        createdAt: c.createdAt.toISOString(),
       })),
       substitutions: subRows.map((s) => ({
         id: s.id,
@@ -436,6 +461,7 @@ export async function getMatchOperationsBundle(
         playerInName: names.get(s.playerInId) ?? "—",
         period: s.period,
         minute: s.minute,
+        createdAt: s.createdAt.toISOString(),
       })),
       fouls: foulRows.map((f) => ({
         id: f.id,
@@ -447,6 +473,7 @@ export async function getMatchOperationsBundle(
         foulKind: f.foulKind,
         period: f.period,
         minute: f.minute,
+        createdAt: f.createdAt.toISOString(),
       })),
       penalties: penRows.map((p) => ({
         id: p.id,
@@ -456,6 +483,7 @@ export async function getMatchOperationsBundle(
         outcome: p.outcome,
         period: p.period,
         minute: p.minute,
+        createdAt: p.createdAt.toISOString(),
       })),
       onFieldPlayerIds: {
         home: [...(onFieldMap.get(ctx.homeTeamId) ?? [])],

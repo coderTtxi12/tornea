@@ -22,7 +22,9 @@ export function LiveFormField({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor} className="text-foreground-muted text-sm font-medium">
+        {label}
+      </Label>
       {children}
       {error ? (
         <p className="text-brand-purple text-xs" role="alert">

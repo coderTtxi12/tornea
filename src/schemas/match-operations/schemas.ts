@@ -27,7 +27,7 @@ export const clockSchema = z.object({
 
 export const goalSchema = z.object({
   teamId: z.string().uuid(),
-  scorerPlayerId: z.string().uuid().optional().nullable(),
+  scorerPlayerId: z.string().uuid(),
   assistPlayerId: z.string().uuid().optional().nullable(),
   period: footballPeriodSchema,
   minute: z.number().int().min(0).max(130),

@@ -45,7 +45,8 @@ export type PlayerTechnicalSheetPanelProps = {
   teamId: string;
   playerId: string;
   onClose: () => void;
-  onRequestEdit: () => void;
+  onRequestEdit?: () => void;
+  readOnly?: boolean;
 };
 
 function playerInitial(fullName: string): string {
@@ -188,12 +189,14 @@ export function PlayerTechnicalSheetPanel({
   playerId,
   onClose,
   onRequestEdit,
+  readOnly = false,
 }: PlayerTechnicalSheetPanelProps) {
   const [sheet, setSheet] = useState<SheetApiPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadBusy, setDownloadBusy] = useState<null | "photo" | "curp">(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
+  const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -394,6 +397,37 @@ export function PlayerTechnicalSheetPanel({
 
   return (
     <div className="flex flex-col gap-0 pb-6">
+      {photoPreviewOpen && showPhoto ? (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Foto de ${player.fullName}`}
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-zoom-out"
+            onClick={() => setPhotoPreviewOpen(false)}
+            aria-label="Cerrar foto"
+          />
+          <div className="relative z-10 max-h-full max-w-5xl overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
+            <img
+              src={photoUrl}
+              alt={`Foto de ${player.fullName}`}
+              className="max-h-[86vh] max-w-full object-contain"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white hover:bg-black"
+              onClick={() => setPhotoPreviewOpen(false)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <section className="relative overflow-hidden rounded-2xl border border-amber-500/25 bg-gradient-to-br from-[#071426] via-[#0b1f3a] to-brand-navy text-white shadow-[0_0_0_1px_rgba(251,191,36,0.08)_inset]">
         <div className="h-1 w-full bg-gradient-to-r from-amber-700 via-amber-300 to-amber-700" />
         <div
@@ -409,7 +443,13 @@ export function PlayerTechnicalSheetPanel({
         <div className="relative flex flex-col gap-6 px-5 py-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex min-w-0 flex-1 flex-col gap-5 sm:flex-row sm:items-end">
             <div className="shrink-0">
-              <div className="ring-amber-400/35 relative size-[7.5rem] overflow-hidden rounded-2xl bg-black/30 shadow-xl ring-2">
+              <button
+                type="button"
+                className="ring-amber-400/35 relative size-[7.5rem] overflow-hidden rounded-2xl bg-black/30 text-left shadow-xl ring-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/60"
+                disabled={!showPhoto}
+                onClick={() => setPhotoPreviewOpen(true)}
+                aria-label={showPhoto ? `Ver foto grande de ${player.fullName}` : undefined}
+              >
                 {showPhoto ? (
                   <img
                     src={photoUrl}
@@ -424,7 +464,7 @@ export function PlayerTechnicalSheetPanel({
                     {playerInitial(player.fullName)}
                   </div>
                 )}
-              </div>
+              </button>
             </div>
 
             <div className="min-w-0 flex-1 pb-0.5">
@@ -575,7 +615,9 @@ export function PlayerTechnicalSheetPanel({
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-foreground-subtle text-xs leading-relaxed">
-            Editá dorsal, foto, datos de contacto y documentación desde el formulario del jugador.
+            {readOnly
+              ? "Ficha en modo consulta para validar identidad en cancha."
+              : "Editá dorsal, foto, datos de contacto y documentación desde el formulario del jugador."}
           </p>
           <div className="flex shrink-0 flex-wrap gap-2">
             <button
@@ -585,13 +627,15 @@ export function PlayerTechnicalSheetPanel({
             >
               Cerrar
             </button>
-            <button
-              type="button"
-              onClick={onRequestEdit}
-              className="rounded-full bg-amber-500 px-5 py-2 text-xs font-black tracking-wide text-[#0a1628] shadow-sm hover:bg-amber-400"
-            >
-              Editar datos
-            </button>
+            {!readOnly && onRequestEdit ? (
+              <button
+                type="button"
+                onClick={onRequestEdit}
+                className="rounded-full bg-amber-500 px-5 py-2 text-xs font-black tracking-wide text-[#0a1628] shadow-sm hover:bg-amber-400"
+              >
+                Editar datos
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

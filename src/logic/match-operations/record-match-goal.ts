@@ -13,7 +13,7 @@ export type RecordMatchGoalInput = {
   leagueId: string;
   matchId: string;
   teamId: string;
-  scorerPlayerId?: string | null;
+  scorerPlayerId: string;
   assistPlayerId?: string | null;
   period: "first_half" | "second_half";
   minute: number;
@@ -73,13 +73,11 @@ export async function recordMatchGoal(
     cardKind: c.cardKind as "yellow" | "red" | "second_yellow",
   }));
 
-  if (input.scorerPlayerId) {
-    if (!lineupIds.has(input.scorerPlayerId)) {
-      return { ok: false, reason: "player_not_in_lineup" };
-    }
-    if (isPlayerExpelled(input.teamId, input.scorerPlayerId, cards)) {
-      return { ok: false, reason: "player_expelled" };
-    }
+  if (!lineupIds.has(input.scorerPlayerId)) {
+    return { ok: false, reason: "player_not_in_lineup" };
+  }
+  if (isPlayerExpelled(input.teamId, input.scorerPlayerId, cards)) {
+    return { ok: false, reason: "player_expelled" };
   }
   if (input.assistPlayerId) {
     if (!lineupIds.has(input.assistPlayerId)) {

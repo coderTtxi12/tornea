@@ -8,6 +8,7 @@ import { readMatchReportMetadata } from "@/logic/leagues/match-report-metadata";
 import { loadMatchForOperations } from "./match-operations-access";
 import type { MatchClockPeriod } from "./match-operations-metadata";
 import {
+  effectiveMatchClock,
   mergeMatchOperationsIntoReport,
   readMatchOperationsMetadata,
 } from "./match-operations-metadata";
@@ -47,7 +48,7 @@ export async function tickMatchClock(
   if (ctx.status !== "live") return { ok: false, reason: "not_live" };
 
   const ops = readMatchOperationsMetadata(ctx.report);
-  const clock = ops.clock;
+  const clock = effectiveMatchClock(ops.clock);
   if (!clock) return { ok: false, reason: "no_clock" };
 
   const reportDuration = readMatchReportMetadata(ctx.report);
@@ -57,18 +58,17 @@ export async function tickMatchClock(
 
   if (action === "pause") {
     next.isPaused = true;
+    next.periodStartedAt = null;
   } else if (action === "resume") {
     next.isPaused = false;
-    if (!next.periodStartedAt) {
-      next.periodStartedAt = now.toISOString();
-    }
+    next.periodStartedAt = now.toISOString();
   } else if (action === "end_period") {
     const period = nextPeriod(next.period);
     next = {
       period,
       elapsedSeconds: 0,
       isPaused: period === "halftime" || period === "ended",
-      periodStartedAt: period === "ended" ? null : now.toISOString(),
+      periodStartedAt: period === "halftime" || period === "ended" ? null : now.toISOString(),
     };
     void reportDuration;
   }

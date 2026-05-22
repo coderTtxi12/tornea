@@ -2,7 +2,17 @@
 
 Complete reference for PostgreSQL (Drizzle ORM): **enums**, **tables**, **columns**, plus **business conventions** the schema does not enforce by itself.
 
-**Source of truth in code:** `src/db/schema.ts` (line-accurate types and FK behavior). Migrations: `drizzle/`. Apply: `npm run db:migrate` (via `scripts/migrate.cjs`, loads `.env` then `.env.local`, **este último pisa** `DATABASE_URL`). El comando imprime `host:puerto/base` para comprobar que es **la misma** URL que usa Next (`next dev` / despliegue). Si ves errores del tipo «column … does not exist» pero las migraciones “ya están aplicadas», casi siempre es **otra base** o un estado incoherente; existe la migración `0011_matches_sport_code_if_missing` como reparación idempotente para `matches.sport_code`. After schema edits: `npm run db:generate` for new migrations.
+**Source of truth in code:** `src/db/schema.ts` (line-accurate types and FK behavior). Migrations: `drizzle/`. Apply: `npm run db:migrate` (via `scripts/migrate.cjs`, loads `.env` then `.env.local`, **este último pisa** `DATABASE_URL`). El comando imprime `host:puerto/base` para comprobar que es **la misma** URL que usa Next (`next dev` / despliegue).
+
+**Schema drift:** Si el journal de Drizzle marca `0003_football_match_details` como aplicada pero faltan tablas (`match_lineups`, `match_cards`, …) o columnas en `match_goals` (`sport_code`, `goal_kind`, …), suele ser **otra `DATABASE_URL`** o un apply parcial. Reparación idempotente (misma URL que Next):
+
+| Script | Command |
+|--------|---------|
+| Acta / detalle fútbol (enums, tablas 0003/0004, columnas en `match_goals`) | `npm run db:ensure:match-football-detail` |
+| Tabla `league_referees` | `npm run db:ensure:league-referees` |
+| Columna `matches.league_referee_id` | `npm run db:ensure:matches-league-referee` |
+
+Migraciones de reparación en `drizzle/`: `0011`–`0015` (ver [Migrations](#migrations)). Tras cambiar `schema.ts`: `npm run db:generate` y commit del SQL nuevo.
 
 ---
 
@@ -32,6 +42,12 @@ flowchart TB
   venues[venues]
   league_referees[league_referees]
   matches[matches]
+  match_lineups[match_lineups]
+  match_goals[match_goals]
+  match_cards[match_cards]
+  match_substitutions[match_substitutions]
+  match_fouls[match_fouls]
+  match_penalty_attempts[match_penalty_attempts]
 
   users --> dashboard_access_requests
   users --> app_audit_logs
@@ -48,12 +64,19 @@ flowchart TB
   leagues --> teams
   leagues --> venues
   leagues --> league_referees
+  league_referees --> matches
   leagues --> players
   seasons --> season_teams
   teams --> season_teams
   seasons --> matches
   teams --> matches
   players --> team_rosters
+  matches --> match_lineups
+  matches --> match_goals
+  matches --> match_cards
+  matches --> match_substitutions
+  matches --> match_fouls
+  matches --> match_penalty_attempts
 ```
 
 - **`dashboard_access_requests`:** solicitudes de acceso al panel (waitlist); ver columna `users.dashboard_access_granted_at`.
@@ -185,6 +208,52 @@ Document the chosen policy in domain code.
 ## Football match detail (extensible via `sport_code` + `metadata`)
 
 Dedicated tables cover structured football data. Default **`sport_code`** is **`football`** unless you evolve multi-sport.
+
+Introduced in migration **`0003_football_match_details`** (+ **`0004_match_fouls`**). Tables:
+
+| Table | Role |
+|-------|------|
+| `match_lineups` | Titular / suplente por partido y equipo. |
+| `match_goals` | Goles (periodo, minuto, asistencia, autogol, `goal_kind`). |
+| `match_cards` | Tarjetas en el acta. |
+| `match_substitutions` | Cambios. |
+| `match_penalty_attempts` | Penaltis en juego (no tanda). |
+| `match_fouls` | Faltas / incidencias; enlace opcional a tarjeta y sanción. |
+| `penalty_shootouts` / `penalty_shootout_kicks` | Tanda de penaltis. |
+| `match_report_submissions` | Informes delegado / prensa / etc. |
+| `sport_match_events` | Eventos genéricos por `event_key`. |
+
+Also on **`matches`:** `started_at`, `ended_at`, `regulation_minutes`, `sport_code` (see [Migrations](#migrations) if columns are missing).
+
+---
+
+## `matches.report` (JSONB conventions)
+
+Single JSON document per match (`matches.report`, default `{}`). The DB does not validate shape; the app merges keys. **Code:** `src/logic/leagues/match-report-metadata.ts`, `src/logic/match-operations/match-operations-metadata.ts`.
+
+### Match setup (per match, does not change `league_categories`)
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `playersOnFieldPerTeam` | integer | Players on the field per team (validated in setup phase). |
+| `firstHalfMinutes` | integer | First half length (minutes). |
+| `halftimeBreakMinutes` | integer | Halftime break (minutes). |
+| `secondHalfMinutes` | integer | Second half length (minutes). |
+
+**Convention:** On create, copy duration defaults from **`league_categories.metadata`** when `matches.league_category_id` is set. Editing the match updates **`matches.report` only**, not the category row. **`matches.regulation_minutes`** should align with first + second half when durations are resolved (`regulationMinutesFromHalves` in app code).
+
+### Live operations workflow (Cancha · En vivo)
+
+Stored in the same `report` blob; read/write via `readMatchOperationsMetadata` / `mergeMatchOperationsIntoReport`.
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `operationsPhase` | string | `setup` → `lineups` → `ready` → `live` → `closed`. |
+| `setupValidatedAt` | ISO string | When phase 1 (datos) was validated. |
+| `lineupsValidatedAt` | ISO string | When lineups were saved. |
+| `clock` | object | `{ period, elapsedSeconds, isPaused, periodStartedAt }`. `period`: `first_half`, `halftime`, `second_half`, `ended`. |
+
+Incidents during **`live`** use normalized tables (`match_goals`, `match_cards`, `match_substitutions`, `match_fouls`, `match_penalty_attempts`), not extra keys in `report`.
 
 ---
 
@@ -542,6 +611,7 @@ Single match in a season.
 | `matchday` | integer | Matchday number (jornada). |
 | `round_label` | text | Etiqueta de **fase** del torneo (final, semifinal, liguilla, etc.). **No hay enum en SQL:** la app puede guardar atajos del formulario o texto libre; el producto no infiere automáticamente la fase salvo lo que se capture aquí. |
 | `venue_id` | uuid FK → `venues.id` | Venue (set null on delete). |
+| `league_referee_id` | uuid FK → `league_referees.id` | Contact referee from league directory (set null on delete). Optional; UI label “árbitro”. Distinct from **`match_officials`** (app `users`). |
 | `scheduled_at` | timestamptz NOT NULL | Kickoff (scheduled). |
 | `timezone` | text NOT NULL DEFAULT `America/Guayaquil` | Interpretation of local fields. |
 | `home_team_id` | uuid FK → `teams.id` | Home team (restrict delete). |
@@ -555,11 +625,13 @@ Single match in a season.
 | `regulation_minutes` | integer DEFAULT 90 | Regulation length (e.g. 90 for football 11). |
 | `attendance` | integer | Spectators. |
 | `notes` | text | Free-form notes. |
-| `report` | jsonb NOT NULL DEFAULT `{}` | Structured report blob. **Convention (app):** optional **`playersOnFieldPerTeam`** y, si el partido tiene categoría, override de duración **`firstHalfMinutes`**, **`halftimeBreakMinutes`**, **`secondHalfMinutes`** (precargados desde `league_categories.metadata`; editar en el partido no cambia la categoría). **`regulation_minutes`** = primer tiempo + segundo tiempo cuando hay duración resuelta. |
+| `report` | jsonb NOT NULL DEFAULT `{}` | See [`matches.report` (JSONB conventions)](#matchesreport-jsonb-conventions). |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
 
 Check: `home_team_id <> away_team_id`.
+
+Index: `matches_league_referee_id_idx` on `league_referee_id`.
 
 ### `match_goals`
 
@@ -846,14 +918,30 @@ Prize draws / raffles scoped to a season.
 | `0000_initial` | Baseline schema. |
 | `0001_set_updated_at` | `updated_at` trigger helper. |
 | `0002_supabase_auth_user_id` | Auth linkage on `users`. |
-| `0003_football_match_details` | Football match detail tables. |
-| `0004_match_fouls` | Match fouls / discipline links. |
+| `0003_football_match_details` | Football acta: enums (`football_*`, `lineup_slot`, `match_report_kind`), tables `match_lineups`, `match_goals`, `match_cards`, `match_substitutions`, `match_penalty_attempts`, `penalty_shootouts`, `penalty_shootout_kicks`, `match_report_submissions`, `sport_match_events`; columns on `matches` (`sport_code`, `started_at`, `ended_at`, `regulation_minutes`, `attendance`). |
+| `0004_match_fouls` | Enum **`football_foul_kind`**; table **`match_fouls`**. |
 | `0005_spooky_bulldozer` | **`dashboard_access_requests`**; **`users.dashboard_access_granted_at`**. |
 | `0006_lying_living_tribunal` | **`league_create_idempotency`**. |
 | `0007_lean_trish_tilby` | **`league_categories`** + enum **`league_category_gender`**; nullable **`season_teams.league_category_id`** and **`matches.league_category_id`**. |
 | `0008_unusual_catseye` | **`league_category_create_idempotency`** (idempotencia al crear categorías). |
 | `0009_eminent_praxagora` | Enum **`app_audit_action`**; tabla **`app_audit_logs`** (auditoría app web). |
 | `0010_closed_hairball` | **`venues.metadata`** (jsonb default `{}`). |
+| `0011_matches_sport_code_if_missing` | Idempotent: `matches.sport_code` if journal ahead of DB. |
+| `0012_matches_football_columns_if_missing` | Idempotent: `matches` timing/attendance columns from 0003. |
+| `0013_league_referees` | Table **`league_referees`** (directorio de árbitros por liga). |
+| `0014_matches_league_referee_id` | **`matches.league_referee_id`** → `league_referees` (set null on delete). |
+| `0015_match_football_detail_columns_if_missing` | Idempotent: football enums + `match_goals` detail columns if 0003 partially applied. |
+
+### Idempotent repair SQL (`scripts/sql/`)
+
+Same **`DATABASE_URL`** as the running app. Does not update Drizzle journal; safe to re-run.
+
+| npm script | SQL file | When to use |
+|------------|----------|-------------|
+| `db:ensure:match-football-detail` | `ensure-match-football-detail-columns.sql` | Missing acta tables or `match_goals.sport_code` / related columns (errors `42P01`, `42703`, `42704`). |
+| `db:ensure:league-referees` | `ensure-league-referees.sql` | Missing **`league_referees`**. |
+| `db:ensure:matches-league-referee` | `ensure-matches-league-referee-id.sql` | Missing **`matches.league_referee_id`**. |
+| `db:apply:sql` | (path argument) | Run any custom SQL file. |
 
 ---
 
