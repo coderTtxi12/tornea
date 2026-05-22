@@ -12,6 +12,7 @@
     "db:migrate": "node scripts/migrate.cjs",
     "db:ensure:league-referees": "node scripts/run-sql-file.cjs scripts/sql/ensure-league-referees.sql",
     "db:ensure:matches-league-referee": "node scripts/run-sql-file.cjs scripts/sql/ensure-matches-league-referee-id.sql",
+    "db:ensure:match-football-detail": "node scripts/run-sql-file.cjs scripts/sql/ensure-match-football-detail-columns.sql",
     "db:check:players-metadata": "node scripts/check-players-metadata.cjs",
     "db:apply:sql": "node scripts/run-sql-file.cjs",
     "db:seed:dashboard-user": "node scripts/seed-dashboard-access-user.cjs",

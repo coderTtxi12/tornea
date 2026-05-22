@@ -1,23 +1,23 @@
-# Partido: duración por tiempos (obligatorio)
+# Match: duration by halves (required)
 
-## Requisito
-En **Nuevo partido** / editar partido, capturar obligatoriamente:
-- Minutos primer tiempo
-- Minutos medio tiempo (descanso)
-- Minutos segundo tiempo
+## Requirement
+On **New match** / edit match, require:
+- First-half minutes
+- Halftime break minutes
+- Second-half minutes
 
-## Almacenamiento
-- `matches.report`: `firstHalfMinutes`, `halftimeBreakMinutes`, `secondHalfMinutes` (enteros).
-- `matches.regulation_minutes`: `firstHalfMinutes + secondHalfMinutes` (tiempo reglamentario en cancha, sin descanso).
+## Storage
+- `matches.report`: `firstHalfMinutes`, `halftimeBreakMinutes`, `secondHalfMinutes` (integers).
+- `matches.regulation_minutes`: `firstHalfMinutes + secondHalfMinutes` (regulation time on the pitch, excluding the break).
 
-## Validación API
-Enteros 1–120 por tiempo; descanso 0–60.
+## API validation
+Integers 1–120 per half; break 0–60.
 
 ## UI (Tornea dashboard)
-- `fieldset` «Duración del partido» con grid 3 columnas en `sm+`.
-- Campos `required`, etiquetas claras, asterisco en leyenda.
-- Valores por defecto al crear: 45 / 15 / 45.
-- Al editar: leer de `report`; si faltan (partidos viejos), mismo default.
+- `fieldset` “Match duration” with a 3-column grid at `sm+`.
+- `required` fields, clear labels, asterisk in the legend.
+- Defaults when creating: 45 / 15 / 45.
+- When editing: read from `report`; if missing (legacy matches), use the same defaults.
 
-## Fuera de alcance
-- No modificar categorías ni plantillas de liga.
+## Out of scope
+- Do not change categories or league templates.

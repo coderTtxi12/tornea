@@ -19,7 +19,7 @@ Replace the minimal login-only home with a full marketing landing that converts 
 | Purple | `#8B5CF6` |
 | Navy bg | `#020818` |
 | Font | Poppins (already in `layout.tsx`) |
-| Slogan | Organiza. Compite. Conecta. |
+| Slogan | Organize. Compete. Connect. (product copy: *Organiza. Compite. Conecta.*) |
 
 ## UX pattern (ui-ux-pro-max)
 
@@ -30,7 +30,7 @@ Replace the minimal login-only home with a full marketing landing that converts 
 
 ## Sections
 
-1. Sticky nav + CTA “Entrar”
+1. Sticky nav + “Sign in” CTA
 2. Hero: copy, Google CTA, 3D canvas
 3. Sports marquee
 4. Bento features (5 cards, tilt on hover)
@@ -43,10 +43,10 @@ Replace the minimal login-only home with a full marketing landing that converts 
 ## Technical
 
 - Route: `src/app/page.tsx` → `TorneaLanding` (client)
-- **UI:** shadcn/ui (`Button`, `Card`, `Badge`, `Separator`) + Radix Slot — tokens en `globals.css`
-- 3D: “Arena ecosystem” — núcleo + graderías + nodos orbitantes + arcos (ui-ux: Interactive 3D showcase, motion parallax). `TorneaHero3D.tsx`
+- **UI:** shadcn/ui (`Button`, `Card`, `Badge`, `Separator`) + Radix Slot — tokens in `globals.css`
+- 3D: “Arena ecosystem” — core + stands + orbiting nodes + arcs (ui-ux: Interactive 3D showcase, motion parallax). `TorneaHero3D.tsx`
 - Auth: unchanged redirect to `/dashboard` or `/solicitar-acceso`
-- Añadir más piezas: `pnpm dlx shadcn@latest add <component>` (ver `components.json`)
+- Add more components: `pnpm dlx shadcn@latest add <component>` (see `components.json`)
 
 ## Checklist (ui-ux pre-delivery)
 

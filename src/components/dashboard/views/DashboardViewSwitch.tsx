@@ -114,7 +114,12 @@ export function DashboardViewSwitch({
         />
       );
     case "live":
-      return <DashboardLiveView />;
+      return (
+        <DashboardLiveView
+          hasManagedLeagues={leagueOrgCards.length > 0}
+          onOpenEditMatchDrawer={onOpenEditMatchDrawer}
+        />
+      );
     case "teams":
       return (
         <DashboardTeamsView

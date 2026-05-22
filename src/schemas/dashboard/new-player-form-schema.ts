@@ -7,6 +7,7 @@ import {
   normalizeCurpInput,
 } from "@/logic/players/curp";
 import { findDialOptionByIso2 } from "@/lib/phone/country-dial-options";
+import { validateBirthDateIso } from "@/logic/players/birth-date-validation";
 
 /**
  * Validación de campos de texto del formulario "Agregar jugador". La CURP (texto)
@@ -19,52 +20,9 @@ import { findDialOptionByIso2 } from "@/lib/phone/country-dial-options";
  * - Fecha de nacimiento obligatoria (`YYYY-MM-DD`), anterior a hoy, año ≥ 1900.
  */
 function addBirthDateFieldIssues(val: string, ctx: z.RefinementCtx) {
-  const s = val.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Selecciona una fecha de nacimiento válida.",
-      path: ["birthDate"],
-    });
-    return;
-  }
-  const [yStr, mStr, dStr] = s.split("-");
-  const y = Number(yStr);
-  const mo = Number(mStr);
-  const d = Number(dStr);
-  if (!y || !mo || !d || mo < 1 || mo > 12 || d < 1 || d > 31) {
-    ctx.addIssue({
-      code: "custom",
-      message: "La fecha de nacimiento no es válida.",
-      path: ["birthDate"],
-    });
-    return;
-  }
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
-    ctx.addIssue({
-      code: "custom",
-      message: "La fecha de nacimiento no es válida.",
-      path: ["birthDate"],
-    });
-    return;
-  }
-  if (y < 1900) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Revisa el año de nacimiento.",
-      path: ["birthDate"],
-    });
-    return;
-  }
-  const now = new Date();
-  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  if (dt.getTime() >= todayUtc) {
-    ctx.addIssue({
-      code: "custom",
-      message: "La fecha de nacimiento debe ser anterior a hoy.",
-      path: ["birthDate"],
-    });
+  const message = validateBirthDateIso(val);
+  if (message) {
+    ctx.addIssue({ code: "custom", message, path: ["birthDate"] });
   }
 }
 

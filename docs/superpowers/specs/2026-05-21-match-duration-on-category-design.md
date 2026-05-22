@@ -1,12 +1,12 @@
-# Duración por tiempos en categoría (no en alta de partido)
+# Duration by halves on category (not on match create)
 
-## Fuente de verdad
-`league_categories.metadata`: `firstHalfMinutes`, `halftimeBreakMinutes`, `secondHalfMinutes` — **obligatorios** al crear/editar categoría, **sin valores por defecto** en el formulario.
+## Source of truth
+`league_categories.metadata`: `firstHalfMinutes`, `halftimeBreakMinutes`, `secondHalfMinutes` — **required** when creating/editing a category, **no default values** in the form.
 
-## Partido
-- Al elegir categoría: precargar los tres valores desde la categoría.
-- El usuario puede editarlos; al guardar van a `matches.report` (no actualizan la categoría).
-- Sin categoría en el partido: no se muestran ni exigen tiempos.
+## Match
+- When a category is selected: preload all three values from the category.
+- The user may edit them; on save they go to `matches.report` (they do not update the category).
+- With no category on the match: do not show or require half durations.
 
 ## `regulation_minutes`
-`firstHalfMinutes + secondHalfMinutes` cuando el partido tiene duración resuelta (report o categoría al guardar).
+`firstHalfMinutes + secondHalfMinutes` when the match has resolved duration (report or category at save time).

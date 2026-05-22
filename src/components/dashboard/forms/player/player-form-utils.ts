@@ -20,10 +20,9 @@ export function teamMatchesQuery(t: MyLeaguesTeamRow, queryNorm: string): boolea
   return haystack.includes(queryNorm);
 }
 
-/** Fecha local `YYYY-MM-DD` (límite superior de nacimiento = hoy). */
-export function localIsoDateString(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+export {
+  BIRTH_DATE_MIN_ISO,
+  birthDateMaxIso,
+  localIsoDateString,
+  validateBirthDateIso,
+} from "@/logic/players/birth-date-validation";

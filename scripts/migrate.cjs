@@ -64,5 +64,6 @@ execSync("npx drizzle-kit migrate", {
 console.info("");
 console.info(
   "[db:migrate] Comando terminó bien. (A veces el spinner de Drizzle oculta la línea «migrations applied» en la terminal.)\n" +
-    "  Si falta la tabla league_referees: `npm run db:ensure:league-referees` (misma DATABASE_URL que Next).",
+    "  Si falta league_referees: `npm run db:ensure:league-referees`.\n" +
+    "  Si match_goals sin sport_code: `npm run db:ensure:match-football-detail` (misma DATABASE_URL que Next).",
 );
