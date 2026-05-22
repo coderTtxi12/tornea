@@ -114,6 +114,19 @@ CREATE TABLE IF NOT EXISTS "match_fouls" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS "sport_match_events" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "match_id" uuid NOT NULL,
+  "sport_code" text DEFAULT 'football' NOT NULL,
+  "event_key" text NOT NULL,
+  "minute" integer,
+  "stoppage_minute" integer,
+  "period" "football_period",
+  "payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+  "sort_order" integer DEFAULT 0 NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
 -- FKs (idempotentes)
 DO $$ BEGIN ALTER TABLE "match_lineups" ADD CONSTRAINT "match_lineups_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -164,6 +177,9 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE "match_fouls" ADD CONSTRAINT "match_fouls_recorded_by_user_id_users_id_fk" FOREIGN KEY ("recorded_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN ALTER TABLE "sport_match_events" ADD CONSTRAINT "sport_match_events_match_id_matches_id_fk" FOREIGN KEY ("match_id") REFERENCES "public"."matches"("id") ON DELETE cascade;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- Índices
 CREATE INDEX IF NOT EXISTS "match_lineups_match_id_idx" ON "match_lineups" ("match_id");
 CREATE INDEX IF NOT EXISTS "match_lineups_team_id_idx" ON "match_lineups" ("team_id");
@@ -176,6 +192,8 @@ CREATE INDEX IF NOT EXISTS "match_penalty_attempts_match_id_idx" ON "match_penal
 CREATE INDEX IF NOT EXISTS "match_penalty_attempts_team_id_idx" ON "match_penalty_attempts" ("team_id");
 CREATE INDEX IF NOT EXISTS "match_fouls_match_id_idx" ON "match_fouls" ("match_id");
 CREATE INDEX IF NOT EXISTS "match_fouls_offending_player_id_idx" ON "match_fouls" ("offending_player_id");
+CREATE INDEX IF NOT EXISTS "sport_match_events_match_id_idx" ON "sport_match_events" ("match_id");
+CREATE INDEX IF NOT EXISTS "sport_match_events_sport_key_idx" ON "sport_match_events" ("sport_code", "event_key");
 
 -- match_goals + matches (columnas de 0003)
 ALTER TABLE "match_goals" ADD COLUMN IF NOT EXISTS "sport_code" text DEFAULT 'football' NOT NULL;

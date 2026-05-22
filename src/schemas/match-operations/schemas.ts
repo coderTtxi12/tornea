@@ -21,9 +21,27 @@ export const lineupsSchema = z.object({
     .min(2),
 });
 
-export const clockSchema = z.object({
-  action: z.enum(["pause", "resume", "end_period"]),
-});
+export const clockSchema = z
+  .object({
+    action: z.enum(["pause", "resume", "end_period", "add_stoppage"]),
+    minutes: z.number().int().min(1).max(30).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.action === "add_stoppage" && data.minutes == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Indica los minutos de tiempo extra.",
+        path: ["minutes"],
+      });
+    }
+    if (data.action !== "add_stoppage" && data.minutes != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Los minutos solo aplican al añadir tiempo extra.",
+        path: ["minutes"],
+      });
+    }
+  });
 
 export const goalSchema = z.object({
   teamId: z.string().uuid(),

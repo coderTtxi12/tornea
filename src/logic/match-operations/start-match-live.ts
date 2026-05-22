@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { matches } from "@/db/schema";
+import { matches, sportMatchEvents } from "@/db/schema";
 
 import { loadMatchForOperations } from "./match-operations-access";
+import { MATCH_CLOCK_EVENT_KEYS } from "./match-clock-events";
 import {
   initialClockForKickoff,
   mergeMatchOperationsIntoReport,
@@ -40,15 +41,26 @@ export async function startMatchLive(
   });
 
   const db = getDb();
-  await db
-    .update(matches)
-    .set({
-      status: "live",
-      startedAt: ctx.startedAt ?? new Date(),
-      report: reportWithOps,
-      updatedAt: new Date(),
-    })
-    .where(eq(matches.id, matchId));
+  const kickoffAt = ctx.startedAt ?? new Date();
+  await db.transaction(async (tx) => {
+    await tx.insert(sportMatchEvents).values({
+      matchId,
+      sportCode: "football",
+      eventKey: MATCH_CLOCK_EVENT_KEYS.matchStarted,
+      minute: 0,
+      period: "first_half",
+      payload: { label: "Inicio del partido" },
+    });
+    await tx
+      .update(matches)
+      .set({
+        status: "live",
+        startedAt: kickoffAt,
+        report: reportWithOps,
+        updatedAt: new Date(),
+      })
+      .where(eq(matches.id, matchId));
+  });
 
   return { ok: true };
 }

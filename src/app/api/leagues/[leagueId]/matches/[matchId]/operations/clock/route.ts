@@ -39,11 +39,22 @@ export async function POST(
       params.leagueId,
       params.matchId,
       parsed.data.action,
+      parsed.data.action === "add_stoppage"
+        ? { stoppageMinutes: parsed.data.minutes }
+        : undefined,
     );
 
     if (!result.ok) {
       if (result.reason === "forbidden") return opsForbidden();
       if (result.reason === "not_found") return opsNotFound();
+      if (result.reason === "invalid_stoppage") {
+        return opsBadRequest(
+          "Solo puedes añadir tiempo extra en el 2.º tiempo cuando el reloj está cerca del límite.",
+        );
+      }
+      if (result.reason === "not_second_half") {
+        return opsBadRequest("El tiempo extra solo aplica en el 2.º tiempo.");
+      }
       return opsBadRequest("El cronómetro solo está disponible con el partido en vivo.");
     }
 

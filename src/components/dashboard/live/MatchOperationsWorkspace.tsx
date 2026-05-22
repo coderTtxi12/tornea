@@ -41,6 +41,21 @@ import {
   LiveSectionBody,
 } from "./live-ui-primitives";
 import { validateBirthDateIso } from "@/logic/players/birth-date-validation";
+import { matchMinuteFromElapsedSeconds } from "@/logic/match-operations/elapsed-minute";
+import { periodEndActionLabel } from "@/logic/match-operations/match-clock-events";
+
+import {
+  clockElapsedTone,
+  clockToneTextClass,
+  effectivePeriodLimitSeconds,
+  formatClock,
+  formatClockAgainstLimit,
+  formatLiveClockHeaderLabel,
+  isNearPeriodLimit,
+  periodDurationCaption,
+  resolveMatchDurationConfig,
+  secondHalfAddedSecondsFromReport,
+} from "./live-clock-duration";
 import type { MatchOperationsBundle } from "./match-operations-types";
 import { useMatchOperations } from "./use-match-operations";
 import { MockBadge } from "../views/dashboard-view-primitives";
@@ -52,30 +67,11 @@ const PERIOD_LABELS: Record<string, string> = {
   ended: "Finalizado",
 };
 
-function formatClock(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 function currentPeriodForIncidents(
   clock: MatchOperationsBundle["operations"]["clock"],
 ): "first_half" | "second_half" {
   if (clock?.period === "second_half") return "second_half";
   return "first_half";
-}
-
-function endPeriodActionLabel(clock: MatchOperationsBundle["operations"]["clock"]): string {
-  switch (clock?.period) {
-    case "first_half":
-      return "Fin 1.er tiempo";
-    case "halftime":
-      return "Fin descanso";
-    case "second_half":
-      return "Fin 2.º tiempo";
-    default:
-      return "Fin periodo";
-  }
 }
 
 function playerInitial(fullName: string): string {
@@ -185,6 +181,8 @@ export function MatchOperationsWorkspace({
   const { match, operations, liveScore } = bundle;
   const clock = operations.clock;
   const periodLabel = clock ? PERIOD_LABELS[clock.period] ?? clock.period : "—";
+  const durationConfig = resolveMatchDurationConfig(bundle.report);
+  const secondHalfAddedSeconds = secondHalfAddedSecondsFromReport(bundle.report);
 
   const statusBadge =
     match.status === "live" ? (
@@ -213,7 +211,16 @@ export function MatchOperationsWorkspace({
         categoryName={match.categoryName}
         scheduledAt={match.scheduledAt}
         statusBadge={statusBadge}
-        clockLabel={clock ? `${periodLabel} · ${formatClock(localElapsed)}` : null}
+        clockLabel={
+          clock
+            ? formatLiveClockHeaderLabel(
+                clock.period,
+                localElapsed,
+                durationConfig,
+                secondHalfAddedSeconds,
+              )
+            : null
+        }
       />
 
       {bundle.dbWarnings.length > 0 ? (
@@ -289,9 +296,9 @@ export function MatchOperationsWorkspace({
         <LivePanel
           bundle={bundle}
           localElapsed={localElapsed}
-          onClock={async (action) => {
+          onClock={async (payload) => {
             setError(null);
-            const r = await post("clock", { action });
+            const r = await post("clock", payload);
             if (!r.ok) setError(r.error);
           }}
           onIncident={async (path, body) => {
@@ -325,16 +332,6 @@ export function MatchOperationsWorkspace({
       bundle.fouls.length > 0 ||
       bundle.penalties.length > 0 ? (
         <IncidentEventFeed bundle={bundle} />
-      ) : null}
-
-      {(bundle.foulCounts.home >= 5 || bundle.foulCounts.away >= 5) &&
-      operations.operationsPhase === "live" ? (
-        <LiveAlert tone="warn">
-          <p className="font-medium">5 faltas acumuladas</p>
-          <p className="text-foreground-muted mt-1 text-xs">
-            Recomendación: registrar tiro libre directo para el equipo que alcanzó el límite.
-          </p>
-        </LiveAlert>
       ) : null}
     </div>
   );
@@ -937,12 +934,14 @@ function IncidentActionButton({
   icon,
   label,
   accent = "default",
+  selected = false,
   disabled,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   accent?: "default" | "goal";
+  selected?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -952,7 +951,9 @@ function IncidentActionButton({
       className={`flex min-h-14 items-center justify-center gap-2 rounded-brand-lg border px-3 text-sm font-semibold transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45 ${
         accent === "goal"
           ? "border-brand-lime/45 bg-brand-lime text-brand-navy"
-          : "border-border bg-background-muted/35 text-foreground hover:border-brand-teal/40 hover:bg-background-muted/55"
+          : selected
+            ? "border-brand-teal/50 bg-brand-teal/10 text-foreground ring-2 ring-brand-teal/25"
+            : "border-border bg-background-muted/35 text-foreground hover:border-brand-teal/40 hover:bg-background-muted/55"
       }`}
       disabled={disabled}
       onClick={onClick}
@@ -1017,9 +1018,26 @@ function SlideConfirmGoal({
   );
 }
 
-function currentIncidentMinute(seconds: number): number {
-  if (seconds <= 0) return 0;
-  return Math.min(130, Math.ceil(seconds / 60));
+type PenaltyOutcome = "scored" | "saved" | "missed" | "off_target";
+
+const PENALTY_OUTCOMES: { value: PenaltyOutcome; label: string }[] = [
+  { value: "scored", label: "Gol" },
+  { value: "saved", label: "Parada" },
+  { value: "missed", label: "Fallado" },
+  { value: "off_target", label: "Fuera" },
+];
+
+function penaltySuccessMessage(outcome: PenaltyOutcome): string {
+  switch (outcome) {
+    case "scored":
+      return "Penalti convertido.";
+    case "saved":
+      return "Penalti parado.";
+    case "missed":
+      return "Penalti fallado.";
+    case "off_target":
+      return "Penalti fuera.";
+  }
 }
 
 function TeamStatRow({
@@ -1116,46 +1134,65 @@ function LivePanel({
 }: {
   bundle: MatchOperationsBundle;
   localElapsed: number;
-  onClock: (action: "pause" | "resume" | "end_period") => Promise<void>;
+  onClock: (payload: {
+    action: "pause" | "resume" | "end_period" | "add_stoppage";
+    minutes?: number;
+  }) => Promise<void>;
   onIncident: (path: string, body: Record<string, unknown>) => Promise<{ ok: boolean }>;
   onFinish: (body: Record<string, unknown>) => Promise<void>;
 }) {
   const [teamId, setTeamId] = useState(bundle.match.homeTeamId);
   const [playerId, setPlayerId] = useState("");
   const [cardKind, setCardKind] = useState<"yellow" | "red">("yellow");
+  const [penaltyOutcome, setPenaltyOutcome] = useState<PenaltyOutcome>("scored");
+  const [penaltyPanelOpen, setPenaltyPanelOpen] = useState(false);
   const [subOut, setSubOut] = useState("");
   const [subIn, setSubIn] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [incidentBusy, setIncidentBusy] = useState(false);
-  const [clockBusyAction, setClockBusyAction] = useState<"pause" | "resume" | "end_period" | null>(
-    null,
-  );
+  const [clockBusyAction, setClockBusyAction] = useState<
+    "pause" | "resume" | "end_period" | "add_stoppage" | null
+  >(null);
+  const [customStoppageOpen, setCustomStoppageOpen] = useState(false);
+  const [customStoppageMinutes, setCustomStoppageMinutes] = useState("3");
   const period = currentPeriodForIncidents(bundle.operations.clock);
-  const incidentMinute = currentIncidentMinute(localElapsed);
+  const incidentMinute = matchMinuteFromElapsedSeconds(localElapsed);
+  const durationConfig = resolveMatchDurationConfig(bundle.report);
+  const secondHalfAddedSeconds = secondHalfAddedSecondsFromReport(bundle.report);
+  const clockPeriod = bundle.operations.clock?.period;
+  const periodLimitSeconds = effectivePeriodLimitSeconds(
+    clockPeriod,
+    durationConfig,
+    secondHalfAddedSeconds,
+  );
+  const clockTone =
+    periodLimitSeconds != null
+      ? clockElapsedTone(localElapsed, periodLimitSeconds, "seconds")
+      : ("normal" as const);
+  const periodDurationLabel = periodDurationCaption(
+    clockPeriod,
+    durationConfig,
+    secondHalfAddedSeconds,
+  );
+  const showStoppageOptions =
+    clockPeriod === "second_half" &&
+    periodLimitSeconds != null &&
+    isNearPeriodLimit(localElapsed, periodLimitSeconds);
 
   const roster = bundle.rosterByTeam[teamId] ?? [];
   const onFieldIds =
     teamId === bundle.match.homeTeamId
       ? bundle.onFieldPlayerIds.home
       : bundle.onFieldPlayerIds.away;
-  const expelledIds = new Set(
-    bundle.cards
-      .filter(
-        (c) =>
-          c.teamId === teamId &&
-          c.playerId &&
-          (c.cardKind === "red" || c.cardKind === "second_yellow"),
-      )
-      .map((c) => c.playerId as string),
+  const benchIds =
+    teamId === bundle.match.homeTeamId
+      ? bundle.benchPlayerIds.home
+      : bundle.benchPlayerIds.away;
+  const benchLineupById = new Map(
+    bundle.lineups
+      .filter((l) => l.teamId === teamId && l.slot === "bench")
+      .map((l) => [l.playerId, l]),
   );
-  const currentBenchIds = bundle.lineups
-    .filter(
-      (l) =>
-        l.teamId === teamId &&
-        !onFieldIds.includes(l.playerId) &&
-        !expelledIds.has(l.playerId),
-    )
-    .map((l) => l.playerId);
   const onFieldRoster = onFieldIds
     .map((id) => roster.find((p) => p.playerId === id))
     .filter((p): p is (typeof roster)[number] => Boolean(p));
@@ -1170,6 +1207,8 @@ function LivePanel({
     setSubOut("");
     setSubIn("");
     setCardKind("yellow");
+    setPenaltyOutcome("scored");
+    setPenaltyPanelOpen(false);
   };
 
   const runIncident = async (
@@ -1191,11 +1230,17 @@ function LivePanel({
       setIncidentBusy(false);
     }
   };
-  const runClock = async (action: "pause" | "resume" | "end_period") => {
+  const runClock = async (payload: {
+    action: "pause" | "resume" | "end_period" | "add_stoppage";
+    minutes?: number;
+  }) => {
     if (clockBusyAction) return;
-    setClockBusyAction(action);
+    setClockBusyAction(payload.action);
     try {
-      await onClock(action);
+      await onClock(payload);
+      if (payload.action === "add_stoppage") {
+        setCustomStoppageOpen(false);
+      }
     } finally {
       setClockBusyAction(null);
     }
@@ -1207,7 +1252,9 @@ function LivePanel({
         ? "Reanudando reloj..."
         : clockBusyAction === "end_period"
           ? "Finalizando periodo..."
-          : null;
+          : clockBusyAction === "add_stoppage"
+            ? "Añadiendo tiempo extra..."
+            : null;
 
   return (
     <div className="space-y-4">
@@ -1234,13 +1281,98 @@ function LivePanel({
               <p className="font-semibold leading-tight">Reloj</p>
               <p className="text-foreground-muted text-xs">
                 {bundle.operations.clock?.isPaused ? "Pausado" : "En marcha"}
+                {periodDurationLabel ? (
+                  <span className="text-foreground-subtle"> · {periodDurationLabel}</span>
+                ) : null}
               </p>
             </div>
           </div>
-          <span className="text-brand-lime text-3xl font-black tabular-nums">
-            {formatClock(localElapsed)}
-          </span>
+          <div className="text-right">
+            <span
+              className={`text-3xl font-black tabular-nums transition-colors duration-300 ${clockToneTextClass(clockTone)}`}
+              aria-live="polite"
+            >
+              {periodLimitSeconds != null
+                ? formatClockAgainstLimit(
+                    localElapsed,
+                    Math.ceil(periodLimitSeconds / 60),
+                  )
+                : formatClock(localElapsed)}
+            </span>
+            {clockTone !== "normal" ? (
+              <p
+                className={`mt-0.5 text-[10px] font-bold uppercase tracking-wide ${clockToneTextClass(clockTone)}`}
+              >
+                {clockTone === "over" ? "Tiempo cumplido" : "Cerca del límite"}
+              </p>
+            ) : null}
+          </div>
         </div>
+        {secondHalfAddedSeconds > 0 ? (
+          <p className="text-foreground-muted border-t border-border px-3 pb-2 text-center text-xs">
+            +{Math.round(secondHalfAddedSeconds / 60)} min de tiempo extra añadidos
+          </p>
+        ) : null}
+        {showStoppageOptions ? (
+          <div className="space-y-2 border-t border-border px-3 pb-3 pt-2">
+            <p className="text-brand-teal text-center text-xs font-semibold">
+              Añadir tiempo extra al 2.º tiempo
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {([1, 2, 5] as const).map((min) => (
+                <Button
+                  key={min}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-10 shadow-none"
+                  disabled={Boolean(clockBusyAction)}
+                  onClick={() =>
+                    void runClock({ action: "add_stoppage", minutes: min })
+                  }
+                >
+                  +{min} min
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={`h-10 shadow-none ${customStoppageOpen ? "border-brand-teal bg-brand-teal/10 text-brand-teal" : ""}`}
+                disabled={Boolean(clockBusyAction)}
+                onClick={() => setCustomStoppageOpen((o) => !o)}
+              >
+                Otro
+              </Button>
+            </div>
+            {customStoppageOpen ? (
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={customStoppageMinutes}
+                  onChange={(e) => setCustomStoppageMinutes(e.target.value)}
+                  className="border-border bg-background-muted/40 h-10 min-w-0 flex-1 rounded-brand-md border px-3 text-sm tabular-nums"
+                  aria-label="Minutos de tiempo extra personalizados"
+                />
+                <Button
+                  type="button"
+                  variant="default"
+                  className="h-10 shrink-0 shadow-none"
+                  disabled={Boolean(clockBusyAction)}
+                  onClick={() => {
+                    const n = Number.parseInt(customStoppageMinutes, 10);
+                    if (!Number.isInteger(n) || n < 1 || n > 30) return;
+                    void runClock({ action: "add_stoppage", minutes: n });
+                  }}
+                >
+                  Añadir
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-2 border-t border-border p-3">
           <Button
             type="button"
@@ -1248,7 +1380,9 @@ function LivePanel({
             className="h-11 shadow-none"
             disabled={Boolean(clockBusyAction)}
             onClick={() =>
-              void runClock(bundle.operations.clock?.isPaused ? "resume" : "pause")
+              void runClock({
+                action: bundle.operations.clock?.isPaused ? "resume" : "pause",
+              })
             }
           >
             {bundle.operations.clock?.isPaused ? (
@@ -1263,10 +1397,10 @@ function LivePanel({
             variant="outline"
             className="h-11 shadow-none"
             disabled={Boolean(clockBusyAction)}
-            onClick={() => void runClock("end_period")}
+            onClick={() => void runClock({ action: "end_period" })}
           >
             <SkipForward className="size-4" />
-            {endPeriodActionLabel(bundle.operations.clock)}
+            {periodEndActionLabel(bundle.operations.clock?.period)}
           </Button>
         </div>
       </LiveCard>
@@ -1310,6 +1444,7 @@ function LivePanel({
                   setPlayerId("");
                   setSubOut("");
                   setSubIn("");
+                  setPenaltyPanelOpen(false);
                 }}
               >
                 <option value={bundle.match.homeTeamId}>{bundle.match.homeTeamName}</option>
@@ -1320,7 +1455,10 @@ function LivePanel({
               <LiveSelect
                 id="incident-player"
                 value={playerId}
-                onChange={(e) => setPlayerId(e.target.value)}
+                onChange={(e) => {
+                  setPlayerId(e.target.value);
+                  setPenaltyPanelOpen(false);
+                }}
               >
                 <option value="">Selecciona jugador...</option>
                 {onFieldRoster.map((p) => (
@@ -1344,6 +1482,7 @@ function LivePanel({
             <SlideConfirmGoal
               disabled={!playerId || incidentBusy}
               onConfirm={async () => {
+                setPenaltyPanelOpen(false);
                 await runIncident(
                   "goals",
                   {
@@ -1366,7 +1505,8 @@ function LivePanel({
                     : "Amarilla"
               }
               disabled={!playerId || incidentBusy}
-              onClick={() =>
+              onClick={() => {
+                setPenaltyPanelOpen(false);
                 void runIncident(
                   "cards",
                   {
@@ -1377,14 +1517,15 @@ function LivePanel({
                     minute: incidentMinute,
                   },
                   "Tarjeta registrada con éxito.",
-                )
-              }
+                );
+              }}
             />
             <IncidentActionButton
               icon={<Users className="size-4" />}
               label="Cambio"
               disabled={!subOut || !subIn || incidentBusy}
-              onClick={() =>
+              onClick={() => {
+                setPenaltyPanelOpen(false);
                 void runIncident(
                   "substitutions",
                   {
@@ -1395,14 +1536,15 @@ function LivePanel({
                     minute: incidentMinute,
                   },
                   "Cambio registrado con éxito.",
-                )
-              }
+                );
+              }}
             />
             <IncidentActionButton
               icon={<Flag className="size-4" />}
               label="Falta"
               disabled={!playerId || incidentBusy}
-              onClick={() =>
+              onClick={() => {
+                setPenaltyPanelOpen(false);
                 void runIncident(
                   "fouls",
                   {
@@ -1412,28 +1554,60 @@ function LivePanel({
                     minute: incidentMinute,
                   },
                   "Falta registrada con éxito.",
-                )
-              }
+                );
+              }}
             />
             <IncidentActionButton
               icon={<CircleDot className="size-4" />}
               label="Penalti"
+              selected={penaltyPanelOpen}
               disabled={!playerId || incidentBusy}
-              onClick={() =>
-                void runIncident(
-                  "penalties",
-                  {
-                    teamId,
-                    takerId: playerId,
-                    outcome: "scored",
-                    period,
-                    minute: incidentMinute,
-                  },
-                  "Penalti registrado con éxito.",
-                )
-              }
+              onClick={() => setPenaltyPanelOpen((open) => !open)}
             />
           </div>
+
+          {penaltyPanelOpen ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-brand-lg border border-brand-teal/25 bg-brand-teal/5 p-3">
+              <span className="text-foreground-muted w-full text-xs font-bold uppercase tracking-wide sm:w-auto">
+                Resultado del penalti
+              </span>
+              {PENALTY_OUTCOMES.map(({ value, label }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={penaltyOutcome === value ? "secondary" : "ghost"}
+                  size="sm"
+                  className="shadow-none"
+                  disabled={incidentBusy}
+                  onClick={() => setPenaltyOutcome(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="ml-auto shadow-none"
+                disabled={!playerId || incidentBusy}
+                onClick={() =>
+                  void runIncident(
+                    "penalties",
+                    {
+                      teamId,
+                      takerId: playerId,
+                      outcome: penaltyOutcome,
+                      period,
+                      minute: incidentMinute,
+                    },
+                    penaltySuccessMessage(penaltyOutcome),
+                  )
+                }
+              >
+                Registrar penalti
+              </Button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-foreground-muted text-xs font-bold uppercase tracking-wide">
@@ -1490,11 +1664,12 @@ function LivePanel({
                   onChange={(e) => setSubIn(e.target.value)}
                 >
                   <option value="">Suplente…</option>
-                  {currentBenchIds.map((id) => {
+                  {benchIds.map((id) => {
+                    const lineup = benchLineupById.get(id);
                     const p = roster.find((r) => r.playerId === id);
                     return (
                       <option key={id} value={id}>
-                        {p?.playerName ?? id}
+                        {lineup?.playerName ?? p?.playerName ?? id}
                       </option>
                     );
                   })}
@@ -1505,12 +1680,23 @@ function LivePanel({
         </CardContent>
       </LiveCard>
 
+      {bundle.foulCounts.home >= 5 || bundle.foulCounts.away >= 5 ? (
+        <LiveAlert tone="warn">
+          <p className="font-medium">5 faltas acumuladas</p>
+          <p className="text-foreground-muted mt-1 text-xs">
+            Recomendación: registrar tiro libre directo para el equipo que alcanzó el límite.
+          </p>
+        </LiveAlert>
+      ) : null}
+
       <MatchStatsPanel bundle={bundle} />
 
       <FinishPanel bundle={bundle} onFinish={onFinish} />
     </div>
   );
 }
+
+type NoShowFinishMode = "walkover_away" | "walkover_home" | "both_no_show";
 
 function FinishPanel({
   bundle,
@@ -1522,16 +1708,47 @@ function FinishPanel({
   const [home, setHome] = useState(String(bundle.liveScore.home));
   const [away, setAway] = useState(String(bundle.liveScore.away));
   const [notes, setNotes] = useState("");
+  const [noShowMode, setNoShowMode] = useState<NoShowFinishMode | null>(null);
   const [busy, setBusy] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
+
+  const resetFinishForm = () => {
+    setHome(String(bundle.liveScore.home));
+    setAway(String(bundle.liveScore.away));
+    setNotes("");
+    setNoShowMode(null);
+  };
 
   const runFinish = (body: Record<string, unknown>) => {
     setBusy(true);
     void onFinish(body).finally(() => {
       setBusy(false);
       setFinishOpen(false);
+      resetFinishForm();
     });
   };
+
+  const confirmFinish = () => {
+    if (noShowMode) {
+      runFinish({ type: noShowMode, notes: notes || null });
+      return;
+    }
+    runFinish({
+      type: "played",
+      homeScore: Number(home),
+      awayScore: Number(away),
+      notes: notes || null,
+    });
+  };
+
+  const noShowButtonClass = (mode: NoShowFinishMode) =>
+    `min-h-11 justify-center whitespace-normal px-3 text-xs shadow-none ${
+      noShowMode === mode
+        ? "border-brand-teal/50 bg-brand-teal/10 text-foreground ring-2 ring-brand-teal/25"
+        : ""
+    }`;
+
+  const { homeTeamName, awayTeamName } = bundle.match;
 
   return (
     <LiveCard>
@@ -1551,8 +1768,7 @@ function FinishPanel({
             variant="default"
             className="h-11 w-full shadow-none sm:w-auto"
             onClick={() => {
-              setHome(String(bundle.liveScore.home));
-              setAway(String(bundle.liveScore.away));
+              resetFinishForm();
               setFinishOpen(true);
             }}
           >
@@ -1564,10 +1780,18 @@ function FinishPanel({
       <DashboardRightSlideover
         open={finishOpen}
         title="Cerrar partido"
-        description={`Marcador registrado: ${bundle.liveScore.home}–${bundle.liveScore.away}`}
+        description={
+          noShowMode
+            ? undefined
+            : `Marcador registrado: ${bundle.liveScore.home}–${bundle.liveScore.away}`
+        }
         size="lg"
         preventClose={busy}
-        onClose={() => setFinishOpen(false)}
+        onClose={() => {
+          if (busy) return;
+          setFinishOpen(false);
+          resetFinishForm();
+        }}
       >
         <div className="space-y-5">
           <div className="rounded-brand-lg border border-brand-purple/25 bg-brand-purple/5 p-3">
@@ -1578,54 +1802,40 @@ function FinishPanel({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 justify-center whitespace-normal px-3 text-xs shadow-none"
+                className={noShowButtonClass("walkover_away")}
                 disabled={busy}
-                onClick={() => runFinish({ type: "walkover_away", notes: notes || null })}
+                onClick={() =>
+                  setNoShowMode((prev) => (prev === "walkover_away" ? null : "walkover_away"))
+                }
               >
-                No se presenta visitante (3–0 local)
+                No se presenta {awayTeamName} (3 pts - 0 pts)
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 justify-center whitespace-normal px-3 text-xs shadow-none"
+                className={noShowButtonClass("walkover_home")}
                 disabled={busy}
-                onClick={() => runFinish({ type: "walkover_home", notes: notes || null })}
+                onClick={() =>
+                  setNoShowMode((prev) => (prev === "walkover_home" ? null : "walkover_home"))
+                }
               >
-                No se presenta local (3–0 visitante)
+                No se presenta {homeTeamName} (3 pts - 0 pts)
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-11 justify-center whitespace-normal px-3 text-xs shadow-none"
+                className={noShowButtonClass("both_no_show")}
                 disabled={busy}
-                onClick={() => runFinish({ type: "both_no_show", notes: notes || null })}
+                onClick={() =>
+                  setNoShowMode((prev) => (prev === "both_no_show" ? null : "both_no_show"))
+                }
               >
                 Ambos ausentes (0 pts)
               </Button>
             </div>
           </div>
 
-          <div className="grid items-end gap-3 sm:grid-cols-[6rem_6rem_minmax(0,1fr)]">
-            <LiveFormField label="Local" htmlFor="finish-home">
-              <LiveInput
-                id="finish-home"
-                type="number"
-                min={0}
-                value={home}
-                onChange={(e) => setHome(e.target.value)}
-                className="text-center font-semibold tabular-nums"
-              />
-            </LiveFormField>
-            <LiveFormField label="Visitante" htmlFor="finish-away">
-              <LiveInput
-                id="finish-away"
-                type="number"
-                min={0}
-                value={away}
-                onChange={(e) => setAway(e.target.value)}
-                className="text-center font-semibold tabular-nums"
-              />
-            </LiveFormField>
+          {noShowMode ? (
             <LiveFormField label="Notas" htmlFor="finish-notes">
               <LiveInput
                 id="finish-notes"
@@ -1635,7 +1845,39 @@ function FinishPanel({
                 onChange={(e) => setNotes(e.target.value)}
               />
             </LiveFormField>
-          </div>
+          ) : (
+            <div className="grid items-end gap-3 sm:grid-cols-[6rem_6rem_minmax(0,1fr)]">
+              <LiveFormField label={homeTeamName} htmlFor="finish-home">
+                <LiveInput
+                  id="finish-home"
+                  type="number"
+                  min={0}
+                  value={home}
+                  onChange={(e) => setHome(e.target.value)}
+                  className="text-center font-semibold tabular-nums"
+                />
+              </LiveFormField>
+              <LiveFormField label={awayTeamName} htmlFor="finish-away">
+                <LiveInput
+                  id="finish-away"
+                  type="number"
+                  min={0}
+                  value={away}
+                  onChange={(e) => setAway(e.target.value)}
+                  className="text-center font-semibold tabular-nums"
+                />
+              </LiveFormField>
+              <LiveFormField label="Notas" htmlFor="finish-notes">
+                <LiveInput
+                  id="finish-notes"
+                  type="text"
+                  placeholder="Discrepancia u observaciones"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </LiveFormField>
+            </div>
+          )}
 
           <div className="border-t border-border pt-4">
             <Button
@@ -1643,16 +1885,9 @@ function FinishPanel({
               variant="default"
               className="h-12 w-full shadow-none"
               disabled={busy}
-              onClick={() =>
-                runFinish({
-                  type: "played",
-                  homeScore: Number(home),
-                  awayScore: Number(away),
-                  notes: notes || null,
-                })
-              }
+              onClick={confirmFinish}
             >
-              Finalizar con marcador
+              Finalizar partido
             </Button>
           </div>
         </div>

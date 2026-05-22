@@ -10,6 +10,7 @@ import {
   matchLineups,
   matchPenaltyAttempts,
   matchSubstitutions,
+  sportMatchEvents,
   players,
   teamRosters,
   venues,
@@ -21,6 +22,7 @@ import { resolvePlayerPhotoForImgDisplay } from "@/logic/leagues/resolve-supabas
 
 import { isMissingRelationError } from "@/lib/db/pg-error-code";
 
+import { labelForMatchClockEventKey } from "./match-clock-events";
 import { computeLiveScoreFromGoals } from "./compute-live-score";
 import { loadMatchForOperations } from "./match-operations-access";
 import {
@@ -29,6 +31,7 @@ import {
 } from "./match-operations-metadata";
 import {
   countTeamFouls,
+  deriveAvailableBenchByTeam,
   deriveOnFieldByTeam,
 } from "./match-player-state";
 import { safeMatchDetailQuery } from "./safe-query-match-detail";
@@ -129,7 +132,17 @@ export type MatchOperationsBundle = {
     minute: number | null;
     createdAt: string;
   }>;
+  matchEvents: Array<{
+    id: string;
+    eventKey: string;
+    label: string;
+    period: string | null;
+    minute: number | null;
+    createdAt: string;
+  }>;
   onFieldPlayerIds: { home: string[]; away: string[] };
+  /** Suplentes del acta aún disponibles para entrar (desde `match_lineups.slot = bench`). */
+  benchPlayerIds: { home: string[]; away: string[] };
   /** Non-fatal: football detail tables missing until `npm run db:migrate`. */
   dbWarnings: string[];
 };
@@ -311,6 +324,25 @@ export async function getMatchOperationsBundle(
   if (penQ.schemaDrift) noteSchemaDrift("match_penalty_attempts");
   const penRows = penQ.data;
 
+  const eventQ = await safeMatchDetailQuery(
+    () =>
+      db
+        .select({
+          id: sportMatchEvents.id,
+          eventKey: sportMatchEvents.eventKey,
+          period: sportMatchEvents.period,
+          minute: sportMatchEvents.minute,
+          payload: sportMatchEvents.payload,
+          createdAt: sportMatchEvents.createdAt,
+        })
+        .from(sportMatchEvents)
+        .where(eq(sportMatchEvents.matchId, matchId))
+        .orderBy(asc(sportMatchEvents.createdAt)),
+    [],
+  );
+  if (eventQ.schemaDrift) noteSchemaDrift("sport_match_events");
+  const eventRows = eventQ.data;
+
   const playerIds = new Set<string>();
   for (const l of lineupRows) playerIds.add(l.playerId);
   for (const r of rosterRows) playerIds.add(r.playerId);
@@ -351,23 +383,24 @@ export async function getMatchOperationsBundle(
     ctx.awayTeamId,
   );
 
-  const onFieldMap = deriveOnFieldByTeam(
-    lineupRows.map((l) => ({
-      teamId: l.teamId,
-      playerId: l.playerId,
-      slot: l.slot,
-    })),
-    subRows.map((s) => ({
-      teamId: s.teamId,
-      playerOutId: s.playerOutId,
-      playerInId: s.playerInId,
-    })),
-    cardRows.map((c) => ({
-      teamId: c.teamId,
-      playerId: c.playerId,
-      cardKind: c.cardKind,
-    })),
-  );
+  const lineupState = lineupRows.map((l) => ({
+    teamId: l.teamId,
+    playerId: l.playerId,
+    slot: l.slot,
+  }));
+  const subState = subRows.map((s) => ({
+    teamId: s.teamId,
+    playerOutId: s.playerOutId,
+    playerInId: s.playerInId,
+  }));
+  const cardState = cardRows.map((c) => ({
+    teamId: c.teamId,
+    playerId: c.playerId,
+    cardKind: c.cardKind,
+  }));
+
+  const onFieldMap = deriveOnFieldByTeam(lineupState, subState, cardState);
+  const benchMap = deriveAvailableBenchByTeam(lineupState, subState, cardState);
 
   const rosterByTeam: MatchOperationsBundle["rosterByTeam"] = {
     [ctx.homeTeamId]: [],
@@ -485,9 +518,30 @@ export async function getMatchOperationsBundle(
         minute: p.minute,
         createdAt: p.createdAt.toISOString(),
       })),
+      matchEvents: eventRows.map((e) => {
+        const payloadLabel =
+          e.payload &&
+          typeof e.payload === "object" &&
+          "label" in e.payload &&
+          typeof (e.payload as { label?: unknown }).label === "string"
+            ? (e.payload as { label: string }).label
+            : null;
+        return {
+          id: e.id,
+          eventKey: e.eventKey,
+          label: payloadLabel ?? labelForMatchClockEventKey(e.eventKey),
+          period: e.period,
+          minute: e.minute,
+          createdAt: e.createdAt.toISOString(),
+        };
+      }),
       onFieldPlayerIds: {
         home: [...(onFieldMap.get(ctx.homeTeamId) ?? [])],
         away: [...(onFieldMap.get(ctx.awayTeamId) ?? [])],
+      },
+      benchPlayerIds: {
+        home: benchMap.get(ctx.homeTeamId) ?? [],
+        away: benchMap.get(ctx.awayTeamId) ?? [],
       },
       dbWarnings,
     },

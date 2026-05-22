@@ -70,6 +70,27 @@ export function deriveOnFieldByTeam(
   return onField;
 }
 
+/** Suplentes del acta (`slot=bench`) que aún no están en cancha ni expulsados. */
+export function deriveAvailableBenchByTeam(
+  lineups: readonly LineupRow[],
+  substitutions: readonly SubRow[],
+  cards: readonly CardRow[],
+): Map<string, string[]> {
+  const onField = deriveOnFieldByTeam(lineups, substitutions, cards);
+  const byTeam = new Map<string, string[]>();
+
+  for (const row of lineups) {
+    if (row.slot !== "bench") continue;
+    if (onField.get(row.teamId)?.has(row.playerId)) continue;
+    if (isPlayerExpelled(row.teamId, row.playerId, cards)) continue;
+    const list = byTeam.get(row.teamId);
+    if (list) list.push(row.playerId);
+    else byTeam.set(row.teamId, [row.playerId]);
+  }
+
+  return byTeam;
+}
+
 export function isPlayerExpelled(
   teamId: string,
   playerId: string,

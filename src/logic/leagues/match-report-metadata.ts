@@ -4,6 +4,8 @@ export type MatchReportMetadataFields = {
   firstHalfMinutes: number | null;
   halftimeBreakMinutes: number | null;
   secondHalfMinutes: number | null;
+  /** Segundos de tiempo añadido al 2.º tiempo durante el partido en vivo. */
+  secondHalfAddedSeconds: number | null;
 };
 
 const REPORT_INT_KEYS = [
@@ -11,6 +13,7 @@ const REPORT_INT_KEYS = [
   "firstHalfMinutes",
   "halftimeBreakMinutes",
   "secondHalfMinutes",
+  "secondHalfAddedSeconds",
 ] as const satisfies readonly (keyof MatchReportMetadataFields)[];
 
 function readOptionalInt(raw: unknown): number | null {
@@ -32,13 +35,14 @@ export function readMatchReportMetadata(report: unknown): MatchReportMetadataFie
     firstHalfMinutes: readOptionalInt(raw.firstHalfMinutes),
     halftimeBreakMinutes: readOptionalInt(raw.halftimeBreakMinutes),
     secondHalfMinutes: readOptionalInt(raw.secondHalfMinutes),
+    secondHalfAddedSeconds: readOptionalInt(raw.secondHalfAddedSeconds),
   };
 }
 
 /** Parche de `report`: borra claves cuando el valor es `null`. */
 export function mergeMatchReportMetadata(
   prev: unknown,
-  fields: MatchReportMetadataFields,
+  fields: Partial<MatchReportMetadataFields>,
 ): Record<string, unknown> {
   const base =
     prev && typeof prev === "object" && !Array.isArray(prev)

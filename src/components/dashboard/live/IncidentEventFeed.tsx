@@ -6,6 +6,7 @@ import {
   Flag,
   ListOrdered,
   ShieldAlert,
+  Timer,
 } from "lucide-react";
 
 import type { MatchOperationsBundle } from "./match-operations-types";
@@ -97,13 +98,33 @@ export function buildIncidentFeedItems(bundle: MatchOperationsBundle): FeedItem[
       createdAt: f.createdAt,
     });
   }
+  for (const e of bundle.matchEvents) {
+    items.push({
+      id: e.id,
+      kind: "clock",
+      minute: e.minute,
+      label: e.label,
+      teamLabel: "Partido",
+      createdAt: e.createdAt,
+    });
+  }
   for (const p of bundle.penalties) {
+    const outcomeLabel =
+      p.outcome === "scored"
+        ? "gol"
+        : p.outcome === "saved"
+          ? "parada"
+          : p.outcome === "missed"
+            ? "fallado"
+            : p.outcome === "off_target"
+              ? "fuera"
+              : p.outcome;
     items.push({
       id: p.id,
       kind: "penalty",
       minute: p.minute,
       label: "Penalti",
-      detail: `${p.takerName ?? "—"} (${p.outcome})`,
+      detail: `${p.takerName ?? "—"} · ${outcomeLabel}`,
       teamLabel: teamLabelForId(bundle, p.teamId),
       createdAt: p.createdAt,
     });
@@ -117,6 +138,7 @@ const ICONS = {
   sub: ArrowLeftRight,
   foul: Flag,
   penalty: CircleDot,
+  clock: Timer,
 } as const;
 
 const ICON_TONES: Record<string, string> = {
@@ -125,6 +147,7 @@ const ICON_TONES: Record<string, string> = {
   sub: "bg-brand-teal/15 text-brand-teal",
   foul: "bg-background-muted text-foreground-muted",
   penalty: "bg-brand-blue/15 text-brand-blue",
+  clock: "bg-brand-teal/15 text-brand-teal",
 };
 
 export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle }) {
@@ -138,14 +161,14 @@ export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle })
         description={
           items.length > 0
             ? `${items.length} incidencia${items.length === 1 ? "" : "s"} registrada${items.length === 1 ? "" : "s"}`
-            : "Cronología de goles, tarjetas y cambios."
+            : "Cronología de goles, tarjetas, cambios y periodos."
         }
       />
       <LiveSectionBody>
         {items.length === 0 ? (
           <p className="text-foreground-muted text-sm">Sin incidencias registradas.</p>
         ) : (
-          <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
             {items.map((item) => {
               const Icon = ICONS[item.kind as keyof typeof ICONS] ?? CircleDot;
               const tone = ICON_TONES[item.kind] ?? ICON_TONES.foul;
@@ -153,10 +176,10 @@ export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle })
               return (
                 <li
                   key={item.id}
-                  className="border-border flex cursor-default items-center gap-3 rounded-brand-lg border bg-background-muted/20 px-3 py-3 text-sm transition-colors duration-200"
+                  className="border-border flex min-h-[4.5rem] cursor-default items-center gap-4 rounded-brand-lg border bg-background-muted/20 px-4 py-4 text-sm transition-colors duration-200"
                 >
                   <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-full ${tone}`}
+                    className={`flex size-10 shrink-0 items-center justify-center rounded-full ${tone}`}
                   >
                     {isGoal ? (
                       <span className="text-base leading-none" aria-hidden>

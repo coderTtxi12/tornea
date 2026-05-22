@@ -1,13 +1,63 @@
 import { eq } from "drizzle-orm";
 
+import type { Db } from "@/db/client";
 import { getDb } from "@/db/client";
-import { matches } from "@/db/schema";
+import { matches, sportMatchEvents } from "@/db/schema";
 
 import { computeLiveScoreFromGoals } from "./compute-live-score";
 import { applySeasonPointsFromResult } from "./apply-season-points-from-result";
 import { loadMatchForOperations } from "./match-operations-access";
-import { mergeMatchOperationsIntoReport } from "./match-operations-metadata";
+import {
+  finishEventForMode,
+  minuteFromClockElapsed,
+} from "./match-clock-events";
+import {
+  mergeMatchOperationsIntoReport,
+  readMatchOperationsMetadata,
+} from "./match-operations-metadata";
 import { getMatchOperationsBundle } from "./get-match-operations-bundle";
+
+type DbTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+async function insertFinishMatchEvent(
+  tx: DbTx,
+  matchId: string,
+  mode: FinishMatchMode,
+  report: unknown,
+) {
+  const ops = readMatchOperationsMetadata(report);
+  const clock = ops.clock ?? {
+    period: "ended" as const,
+    elapsedSeconds: 0,
+    isPaused: true,
+    periodStartedAt: null,
+  };
+  const finishEvent = finishEventForMode(
+    mode.type === "played"
+      ? { type: mode.type, homeScore: mode.homeScore, awayScore: mode.awayScore }
+      : { type: mode.type },
+  );
+  const period =
+    clock.period === "first_half" || clock.period === "second_half"
+      ? clock.period
+      : null;
+
+  await tx.insert(sportMatchEvents).values({
+    matchId,
+    sportCode: "football",
+    eventKey: finishEvent.eventKey,
+    minute: minuteFromClockElapsed(clock.elapsedSeconds),
+    period,
+    payload: {
+      finishType: mode.type,
+      label: finishEvent.label,
+      ...(mode.type === "played"
+        ? { homeScore: mode.homeScore, awayScore: mode.awayScore }
+        : {}),
+      ...(mode.notes?.trim() ? { notes: mode.notes.trim() } : {}),
+    },
+  });
+}
 
 export type FinishMatchMode =
   | { type: "played"; homeScore: number; awayScore: number; notes?: string | null }
@@ -68,6 +118,7 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
       await applySeasonPointsFromResult(tx, ctx.seasonId, ctx.homeTeamId, ctx.awayTeamId, {
         kind: "both_no_show",
       });
+      await insertFinishMatchEvent(tx, input.matchId, input.mode, ctx.report);
       await tx
         .update(matches)
         .set({
@@ -97,6 +148,7 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
         winnerTeamId: ctx.homeTeamId,
         loserTeamId: ctx.awayTeamId,
       });
+      await insertFinishMatchEvent(tx, input.matchId, input.mode, ctx.report);
       await tx
         .update(matches)
         .set({
@@ -104,7 +156,11 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
           homeScore,
           awayScore,
           endedAt: now,
-          report: mergeMatchOperationsIntoReport(ctx.report, { operationsPhase: "closed" }),
+          notes: notesFromInput,
+          report: mergeMatchOperationsIntoReport(ctx.report, {
+            operationsPhase: "closed",
+            clock: { period: "ended", elapsedSeconds: 0, isPaused: true, periodStartedAt: null },
+          }),
           updatedAt: now,
         })
         .where(eq(matches.id, input.matchId));
@@ -122,6 +178,7 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
         winnerTeamId: ctx.awayTeamId,
         loserTeamId: ctx.homeTeamId,
       });
+      await insertFinishMatchEvent(tx, input.matchId, input.mode, ctx.report);
       await tx
         .update(matches)
         .set({
@@ -129,7 +186,11 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
           homeScore,
           awayScore,
           endedAt: now,
-          report: mergeMatchOperationsIntoReport(ctx.report, { operationsPhase: "closed" }),
+          notes: notesFromInput,
+          report: mergeMatchOperationsIntoReport(ctx.report, {
+            operationsPhase: "closed",
+            clock: { period: "ended", elapsedSeconds: 0, isPaused: true, periodStartedAt: null },
+          }),
           updatedAt: now,
         })
         .where(eq(matches.id, input.matchId));
@@ -165,6 +226,7 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
       homeScore,
       awayScore,
     });
+    await insertFinishMatchEvent(tx, input.matchId, input.mode, ctx.report);
     await tx
       .update(matches)
       .set({
@@ -173,7 +235,10 @@ export async function finishMatch(input: FinishMatchInput): Promise<FinishMatchR
         awayScore,
         endedAt: now,
         notes: notesFromInput,
-        report: mergeMatchOperationsIntoReport(ctx.report, { operationsPhase: "closed" }),
+        report: mergeMatchOperationsIntoReport(ctx.report, {
+          operationsPhase: "closed",
+          clock: { period: "ended", elapsedSeconds: 0, isPaused: true, periodStartedAt: null },
+        }),
         updatedAt: now,
       })
       .where(eq(matches.id, input.matchId));
