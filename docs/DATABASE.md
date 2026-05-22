@@ -126,7 +126,7 @@ Anchor points (both nullable for backwards compatibility — a category may not 
 
 For mixed-gender or unisex categories, use **`gender = 'mixed'`** (a game/category where both genders play). Use **`'unspecified'`** when the league does not track gender. Age windows are open intervals via `age_min` / `age_max` (nullable means "no limit on that side").
 
-**`metadata` convention (app):** optional numeric **`minTeamsToStart`** (minimum teams required to start the category competition); optional **`birthYearMin`** / **`birthYearMax`** (inclusive calendar-year window for allowed birth years). These live in `metadata` when the product captures them; there is no separate SQL column for birth years.
+**`metadata` convention (app):** optional numeric **`minTeamsToStart`** (minimum teams required to start the category competition); optional **`birthYearMin`** / **`birthYearMax`** (inclusive calendar-year window for allowed birth years); optional **`playersOnFieldPerTeam`** (number of players on the field per team at once, e.g. 11 for football 11); required from the dashboard when defining a category: **`firstHalfMinutes`**, **`halftimeBreakMinutes`**, **`secondHalfMinutes`** (plantilla de duración por tiempos). These live in `metadata` when the product captures them; there is no separate SQL column for birth years.
 
 ### League category create idempotency
 
@@ -378,7 +378,7 @@ Competition categories (e.g. *Varonil*, *Femenil*, *Sub-15*) inside a league. Se
 | `age_min` | integer | Min age (inclusive). `NULL` = no lower bound. |
 | `age_max` | integer | Max age (inclusive). `NULL` = no upper bound. |
 | `sort_order` | integer NOT NULL DEFAULT 0 | Display order in UI. |
-| `metadata` | jsonb NOT NULL DEFAULT `{}` | Extra fields (rules per category). App may store **`minTeamsToStart`**, **`birthYearMin`**, **`birthYearMax`**. |
+| `metadata` | jsonb NOT NULL DEFAULT `{}` | Extra fields (rules per category). App may store **`minTeamsToStart`**, **`birthYearMin`**, **`birthYearMax`**, **`playersOnFieldPerTeam`**, **`firstHalfMinutes`**, **`halftimeBreakMinutes`**, **`secondHalfMinutes`**. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
 
@@ -555,7 +555,7 @@ Single match in a season.
 | `regulation_minutes` | integer DEFAULT 90 | Regulation length (e.g. 90 for football 11). |
 | `attendance` | integer | Spectators. |
 | `notes` | text | Free-form notes. |
-| `report` | jsonb NOT NULL DEFAULT `{}` | Structured report blob. |
+| `report` | jsonb NOT NULL DEFAULT `{}` | Structured report blob. **Convention (app):** optional **`playersOnFieldPerTeam`** y, si el partido tiene categoría, override de duración **`firstHalfMinutes`**, **`halftimeBreakMinutes`**, **`secondHalfMinutes`** (precargados desde `league_categories.metadata`; editar en el partido no cambia la categoría). **`regulation_minutes`** = primer tiempo + segundo tiempo cuando hay duración resuelta. |
 | `created_at` | timestamptz NOT NULL | Creation time. |
 | `updated_at` | timestamptz NOT NULL | Last update. |
 

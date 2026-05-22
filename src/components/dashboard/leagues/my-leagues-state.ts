@@ -8,6 +8,10 @@ export type MyLeagueCategorySummary = {
   birthYearMin: number | null;
   birthYearMax: number | null;
   minTeamsToStart: number | null;
+  playersOnFieldPerTeam: number | null;
+  firstHalfMinutes: number | null;
+  halftimeBreakMinutes: number | null;
+  secondHalfMinutes: number | null;
   /** ISO string. */
   createdAt: string;
 };
@@ -78,6 +82,11 @@ export type MyLeaguesMatchRow = {
   /** Directorio `league_referees` (opcional). */
   leagueRefereeId: string | null;
   leagueRefereeFullName: string | null;
+  /** `matches.report.playersOnFieldPerTeam` (solo este partido). */
+  playersOnFieldPerTeam: number | null;
+  firstHalfMinutes: number | null;
+  halftimeBreakMinutes: number | null;
+  secondHalfMinutes: number | null;
 };
 
 /** Fila de sedes / canchas (datos reales desde GET /api/leagues/my). */

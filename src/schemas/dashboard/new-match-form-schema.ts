@@ -16,6 +16,12 @@ export const newMatchJsonSchema = z
     notes: z.union([z.string().trim().max(2000), z.null()]).optional(),
     /** Directorio `league_referees` (opcional). */
     leagueRefereeId: z.union([uuid, z.null()]).optional(),
+    /** `matches.report.playersOnFieldPerTeam` — solo este partido (opcional). */
+    playersOnFieldPerTeam: z.union([z.number().int().min(1).max(99), z.null()]).optional(),
+    /** Override en `matches.report` (precargado desde categoría). */
+    firstHalfMinutes: z.union([z.number().int().min(1).max(120), z.null()]).optional(),
+    halftimeBreakMinutes: z.union([z.number().int().min(0).max(60), z.null()]).optional(),
+    secondHalfMinutes: z.union([z.number().int().min(1).max(120), z.null()]).optional(),
   })
   .superRefine((data, ctx) => {
     const t = Date.parse(data.scheduledAt);
@@ -32,6 +38,21 @@ export const newMatchJsonSchema = z
         message: "Local y visitante deben ser equipos distintos.",
         path: ["awayTeamId"],
       });
+    }
+    if (data.leagueCategoryId) {
+      for (const [key, label] of [
+        ["firstHalfMinutes", "primer tiempo"],
+        ["halftimeBreakMinutes", "medio tiempo"],
+        ["secondHalfMinutes", "segundo tiempo"],
+      ] as const) {
+        if (data[key] == null) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Indica los minutos del ${label}.`,
+            path: [key],
+          });
+        }
+      }
     }
   });
 

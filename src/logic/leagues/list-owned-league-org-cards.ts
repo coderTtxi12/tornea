@@ -24,6 +24,11 @@ export type OwnedLeagueCategorySummary = {
   birthYearMax: number | null;
   /** `metadata.minTeamsToStart` si está y es número. */
   minTeamsToStart: number | null;
+  /** `metadata.playersOnFieldPerTeam` si está y es número. */
+  playersOnFieldPerTeam: number | null;
+  firstHalfMinutes: number | null;
+  halftimeBreakMinutes: number | null;
+  secondHalfMinutes: number | null;
   /** ISO string de `created_at`. */
   createdAt: string;
 };
@@ -248,6 +253,10 @@ export async function listOwnedLeaguesOrganizationCards(
       birthYearMin: pickMetadataInt(c.metadata, "birthYearMin"),
       birthYearMax: pickMetadataInt(c.metadata, "birthYearMax"),
       minTeamsToStart: pickMetadataInt(c.metadata, "minTeamsToStart"),
+      playersOnFieldPerTeam: pickMetadataInt(c.metadata, "playersOnFieldPerTeam"),
+      firstHalfMinutes: pickMetadataInt(c.metadata, "firstHalfMinutes"),
+      halftimeBreakMinutes: pickMetadataInt(c.metadata, "halftimeBreakMinutes"),
+      secondHalfMinutes: pickMetadataInt(c.metadata, "secondHalfMinutes"),
       createdAt:
         c.createdAt instanceof Date ? c.createdAt.toISOString() : String(c.createdAt ?? ""),
     });

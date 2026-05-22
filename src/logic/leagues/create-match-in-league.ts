@@ -13,6 +13,11 @@ import {
 } from "@/db/schema";
 
 import { userCanManageLeague } from "./league-dashboard-admin";
+import { readLeagueCategoryMetadata } from "./league-category-metadata";
+import {
+  mergeMatchReportMetadata,
+  regulationMinutesFromHalves,
+} from "./match-report-metadata";
 
 export type CreateMatchInLeagueInput = {
   actorUserId: string;
@@ -28,6 +33,11 @@ export type CreateMatchInLeagueInput = {
   notes?: string | null;
   /** Directorio `league_referees` (opcional). */
   leagueRefereeId?: string | null;
+  /** `matches.report.playersOnFieldPerTeam` (opcional; no altera la categoría). */
+  playersOnFieldPerTeam?: number | null;
+  firstHalfMinutes?: number | null;
+  halftimeBreakMinutes?: number | null;
+  secondHalfMinutes?: number | null;
 };
 
 export type CreateMatchInLeagueResult =
@@ -86,6 +96,55 @@ async function resolveLeagueRefereeIdForMatch(
     return { ok: false, reason: "bad_league_referee" };
   }
   return { ok: true, id: r.id };
+}
+
+type ResolvedMatchDuration = {
+  firstHalfMinutes: number;
+  halftimeBreakMinutes: number;
+  secondHalfMinutes: number;
+};
+
+async function resolveMatchDurationForSave(
+  db: ReturnType<typeof getDb>,
+  leagueId: string,
+  categoryId: string | null,
+  fromInput: {
+    firstHalfMinutes?: number | null;
+    halftimeBreakMinutes?: number | null;
+    secondHalfMinutes?: number | null;
+  },
+): Promise<ResolvedMatchDuration | null> {
+  const fromBody =
+    fromInput.firstHalfMinutes != null &&
+    fromInput.halftimeBreakMinutes != null &&
+    fromInput.secondHalfMinutes != null
+      ? {
+          firstHalfMinutes: fromInput.firstHalfMinutes,
+          halftimeBreakMinutes: fromInput.halftimeBreakMinutes,
+          secondHalfMinutes: fromInput.secondHalfMinutes,
+        }
+      : null;
+  if (fromBody) return fromBody;
+  if (!categoryId) return null;
+  const [cat] = await db
+    .select({ metadata: leagueCategories.metadata })
+    .from(leagueCategories)
+    .where(and(eq(leagueCategories.id, categoryId), eq(leagueCategories.leagueId, leagueId)))
+    .limit(1);
+  if (!cat) return null;
+  const meta = readLeagueCategoryMetadata(cat.metadata);
+  if (
+    meta.firstHalfMinutes == null ||
+    meta.halftimeBreakMinutes == null ||
+    meta.secondHalfMinutes == null
+  ) {
+    return null;
+  }
+  return {
+    firstHalfMinutes: meta.firstHalfMinutes,
+    halftimeBreakMinutes: meta.halftimeBreakMinutes,
+    secondHalfMinutes: meta.secondHalfMinutes,
+  };
 }
 
 /**
@@ -227,6 +286,19 @@ export async function createMatchInLeague(
     return { ok: false, reason: refRes.reason };
   }
 
+  const duration = await resolveMatchDurationForSave(db, input.leagueId, catId, {
+    firstHalfMinutes: input.firstHalfMinutes,
+    halftimeBreakMinutes: input.halftimeBreakMinutes,
+    secondHalfMinutes: input.secondHalfMinutes,
+  });
+
+  const report = mergeMatchReportMetadata({}, {
+    playersOnFieldPerTeam: input.playersOnFieldPerTeam ?? null,
+    firstHalfMinutes: duration?.firstHalfMinutes ?? null,
+    halftimeBreakMinutes: duration?.halftimeBreakMinutes ?? null,
+    secondHalfMinutes: duration?.secondHalfMinutes ?? null,
+  });
+
   const [created] = await db
     .insert(matches)
     .values({
@@ -241,6 +313,13 @@ export async function createMatchInLeague(
       notes,
       leagueRefereeId: refRes.id,
       status: "scheduled",
+      regulationMinutes: duration
+        ? regulationMinutesFromHalves(
+            duration.firstHalfMinutes,
+            duration.secondHalfMinutes,
+          )
+        : undefined,
+      report,
     })
     .returning({ id: matches.id });
 
@@ -280,6 +359,7 @@ export async function updateMatchInLeague(
   const [existing] = await db
     .select({
       id: matches.id,
+      report: matches.report,
     })
     .from(matches)
     .innerJoin(seasons, eq(matches.seasonId, seasons.id))
@@ -310,6 +390,19 @@ export async function updateMatchInLeague(
     return { ok: false, reason: refRes.reason };
   }
 
+  const duration = await resolveMatchDurationForSave(db, input.leagueId, catId, {
+    firstHalfMinutes: input.firstHalfMinutes,
+    halftimeBreakMinutes: input.halftimeBreakMinutes,
+    secondHalfMinutes: input.secondHalfMinutes,
+  });
+
+  const report = mergeMatchReportMetadata(existing.report, {
+    playersOnFieldPerTeam: input.playersOnFieldPerTeam ?? null,
+    firstHalfMinutes: duration?.firstHalfMinutes ?? null,
+    halftimeBreakMinutes: duration?.halftimeBreakMinutes ?? null,
+    secondHalfMinutes: duration?.secondHalfMinutes ?? null,
+  });
+
   await db
     .update(matches)
     .set({
@@ -323,6 +416,13 @@ export async function updateMatchInLeague(
       venueId,
       notes,
       leagueRefereeId: refRes.id,
+      regulationMinutes: duration
+        ? regulationMinutesFromHalves(
+            duration.firstHalfMinutes,
+            duration.secondHalfMinutes,
+          )
+        : undefined,
+      report,
       updatedAt: new Date(),
     })
     .where(eq(matches.id, input.matchId));

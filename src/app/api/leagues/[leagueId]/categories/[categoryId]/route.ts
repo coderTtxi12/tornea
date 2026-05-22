@@ -73,6 +73,10 @@ export async function PATCH(
       birthYearMin: parsed.data.birthYearMin ?? null,
       birthYearMax: parsed.data.birthYearMax ?? null,
       minTeamsToStart: parsed.data.minTeamsToStart ?? null,
+      playersOnFieldPerTeam: parsed.data.playersOnFieldPerTeam ?? null,
+      firstHalfMinutes: parsed.data.firstHalfMinutes,
+      halftimeBreakMinutes: parsed.data.halftimeBreakMinutes,
+      secondHalfMinutes: parsed.data.secondHalfMinutes,
     };
 
     const updated = await updateLeagueCategoryForOwner({

@@ -17,6 +17,10 @@ export type LeagueCategoryEditPayload = {
     birthYearMin: number | null;
     birthYearMax: number | null;
     minTeamsToStart: number | null;
+    playersOnFieldPerTeam: number | null;
+    firstHalfMinutes: number | null;
+    halftimeBreakMinutes: number | null;
+    secondHalfMinutes: number | null;
   };
 };
 
@@ -68,6 +72,10 @@ export async function getLeagueCategoryForOwnerEdit(
       birthYearMin: meta.birthYearMin,
       birthYearMax: meta.birthYearMax,
       minTeamsToStart: meta.minTeamsToStart,
+      playersOnFieldPerTeam: meta.playersOnFieldPerTeam,
+      firstHalfMinutes: meta.firstHalfMinutes,
+      halftimeBreakMinutes: meta.halftimeBreakMinutes,
+      secondHalfMinutes: meta.secondHalfMinutes,
     },
   };
 }

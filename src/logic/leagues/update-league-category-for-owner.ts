@@ -58,6 +58,10 @@ export async function updateLeagueCategoryForOwner(
       birthYearMin: args.fields.birthYearMin,
       birthYearMax: args.fields.birthYearMax,
       minTeamsToStart: args.fields.minTeamsToStart,
+      playersOnFieldPerTeam: args.fields.playersOnFieldPerTeam,
+      firstHalfMinutes: args.fields.firstHalfMinutes,
+      halftimeBreakMinutes: args.fields.halftimeBreakMinutes,
+      secondHalfMinutes: args.fields.secondHalfMinutes,
     });
 
     const [updated] = await tx

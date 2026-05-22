@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 
 import { listManagedLeagueIdsForDashboardUser } from "./league-dashboard-admin";
+import { readMatchReportMetadata } from "./match-report-metadata";
 
 function pgErrorCode(err: unknown): string | undefined {
   let cur: unknown = err;
@@ -57,6 +58,11 @@ export type OwnedMatchDashboardRow = {
   notes: string | null;
   leagueRefereeId: string | null;
   leagueRefereeFullName: string | null;
+  /** `matches.report.playersOnFieldPerTeam` (override por partido). */
+  playersOnFieldPerTeam: number | null;
+  firstHalfMinutes: number | null;
+  halftimeBreakMinutes: number | null;
+  secondHalfMinutes: number | null;
 };
 
 function iso(d: Date | string): string {
@@ -88,7 +94,9 @@ function mapRow(r: {
   notes: string | null;
   leagueRefereeId: string | null;
   leagueRefereeFullName: string | null;
+  report: unknown;
 }): OwnedMatchDashboardRow {
+  const reportMeta = readMatchReportMetadata(r.report);
   return {
     id: r.id,
     leagueId: r.leagueId,
@@ -112,6 +120,10 @@ function mapRow(r: {
     notes: r.notes?.trim() ? r.notes.trim() : null,
     leagueRefereeId: r.leagueRefereeId ?? null,
     leagueRefereeFullName: r.leagueRefereeFullName?.trim() ? r.leagueRefereeFullName.trim() : null,
+    playersOnFieldPerTeam: reportMeta.playersOnFieldPerTeam,
+    firstHalfMinutes: reportMeta.firstHalfMinutes,
+    halftimeBreakMinutes: reportMeta.halftimeBreakMinutes,
+    secondHalfMinutes: reportMeta.secondHalfMinutes,
   };
 }
 
@@ -157,6 +169,7 @@ export async function listOwnedMatchDashboardAll(
         notes: matches.notes,
         leagueRefereeId: matches.leagueRefereeId,
         leagueRefereeFullName: leagueReferees.fullName,
+        report: matches.report,
       })
       .from(matches)
       .innerJoin(seasons, eq(matches.seasonId, seasons.id))
@@ -200,6 +213,7 @@ export async function listOwnedMatchDashboardAll(
           notes: matches.notes,
           leagueRefereeId: sql<string | null>`null::uuid`,
           leagueRefereeFullName: sql<string | null>`null::text`,
+          report: matches.report,
         })
         .from(matches)
         .innerJoin(seasons, eq(matches.seasonId, seasons.id))

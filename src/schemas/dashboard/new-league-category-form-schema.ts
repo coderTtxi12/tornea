@@ -20,6 +20,11 @@ export const newLeagueCategoryJsonSchema = z
     /** Año de nacimiento permitido más reciente (límite superior del rango, ej. 2010). Opcional. */
     birthYearMax: z.union([z.number().int(), z.null()]).optional(),
     minTeamsToStart: z.union([z.number().int().min(1).max(9999), z.null()]).optional(),
+    /** `metadata.playersOnFieldPerTeam` — titulares en cancha por equipo. Opcional. */
+    playersOnFieldPerTeam: z.union([z.number().int().min(1).max(99), z.null()]).optional(),
+    firstHalfMinutes: z.number().int().min(1).max(120),
+    halftimeBreakMinutes: z.number().int().min(0).max(60),
+    secondHalfMinutes: z.number().int().min(1).max(120),
   })
   .superRefine((data, ctx) => {
     const hi = maxAllowedBirthYear();

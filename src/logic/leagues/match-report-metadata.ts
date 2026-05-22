@@ -1,14 +1,17 @@
-/** Campos de reglas deportivas guardados en `league_categories.metadata`. */
-export type LeagueCategoryMetadataFields = {
-  birthYearMin: number | null;
-  birthYearMax: number | null;
-  minTeamsToStart: number | null;
-  /** Jugadores en cancha por equipo (ej. 11 en fútbol 11, 7 en fútbol 7). */
+/** Valores por partido en `matches.report` (no modifica `league_categories`). */
+export type MatchReportMetadataFields = {
   playersOnFieldPerTeam: number | null;
   firstHalfMinutes: number | null;
   halftimeBreakMinutes: number | null;
   secondHalfMinutes: number | null;
 };
+
+const REPORT_INT_KEYS = [
+  "playersOnFieldPerTeam",
+  "firstHalfMinutes",
+  "halftimeBreakMinutes",
+  "secondHalfMinutes",
+] as const satisfies readonly (keyof MatchReportMetadataFields)[];
 
 function readOptionalInt(raw: unknown): number | null {
   if (typeof raw === "number" && Number.isInteger(raw)) return raw;
@@ -19,15 +22,12 @@ function readOptionalInt(raw: unknown): number | null {
   return null;
 }
 
-export function readLeagueCategoryMetadata(metadata: unknown): LeagueCategoryMetadataFields {
+export function readMatchReportMetadata(report: unknown): MatchReportMetadataFields {
   const raw =
-    metadata && typeof metadata === "object" && !Array.isArray(metadata)
-      ? (metadata as Record<string, unknown>)
+    report && typeof report === "object" && !Array.isArray(report)
+      ? (report as Record<string, unknown>)
       : {};
   return {
-    birthYearMin: readOptionalInt(raw.birthYearMin),
-    birthYearMax: readOptionalInt(raw.birthYearMax),
-    minTeamsToStart: readOptionalInt(raw.minTeamsToStart),
     playersOnFieldPerTeam: readOptionalInt(raw.playersOnFieldPerTeam),
     firstHalfMinutes: readOptionalInt(raw.firstHalfMinutes),
     halftimeBreakMinutes: readOptionalInt(raw.halftimeBreakMinutes),
@@ -35,24 +35,16 @@ export function readLeagueCategoryMetadata(metadata: unknown): LeagueCategoryMet
   };
 }
 
-/** Parche de metadata: borra claves cuando el valor es `null`. */
-export function mergeLeagueCategoryMetadata(
+/** Parche de `report`: borra claves cuando el valor es `null`. */
+export function mergeMatchReportMetadata(
   prev: unknown,
-  fields: LeagueCategoryMetadataFields,
+  fields: MatchReportMetadataFields,
 ): Record<string, unknown> {
   const base =
     prev && typeof prev === "object" && !Array.isArray(prev)
       ? { ...(prev as Record<string, unknown>) }
       : {};
-  for (const key of [
-    "birthYearMin",
-    "birthYearMax",
-    "minTeamsToStart",
-    "playersOnFieldPerTeam",
-    "firstHalfMinutes",
-    "halftimeBreakMinutes",
-    "secondHalfMinutes",
-  ] as const) {
+  for (const key of REPORT_INT_KEYS) {
     const v = fields[key];
     if (v == null) {
       delete base[key];
@@ -61,4 +53,12 @@ export function mergeLeagueCategoryMetadata(
     }
   }
   return base;
+}
+
+/** Minutos reglamentarios en cancha (sin descanso). */
+export function regulationMinutesFromHalves(
+  firstHalf: number,
+  secondHalf: number,
+): number {
+  return firstHalf + secondHalf;
 }

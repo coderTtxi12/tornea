@@ -46,6 +46,21 @@ function formatDateEsShort(iso: string): string {
   return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/**
+ * Edad aproximada a partir de años de nacimiento inclusivos (`metadata`).
+ * `birthYearMin` = más antiguo permitido → edad máxima; `birthYearMax` → edad mínima.
+ */
+function formatApproxAgeRangeFromBirthYears(
+  birthYearMin: number,
+  birthYearMax: number,
+): string {
+  const year = new Date().getFullYear();
+  const minAge = year - birthYearMax;
+  const maxAge = year - birthYearMin;
+  if (minAge === maxAge) return `${minAge} años`;
+  return `${minAge}–${maxAge} años`;
+}
+
 function CategoryDetailRow({ label, value }: { label: string; value: string }) {
   return (
     <>
@@ -333,10 +348,33 @@ export function DashboardLeaguesView({
                               value={String(c.birthYearMax)}
                             />
                           ) : null}
+                          {c.birthYearMin != null && c.birthYearMax != null ? (
+                            <CategoryDetailRow
+                              label="Edad aprox."
+                              value={formatApproxAgeRangeFromBirthYears(
+                                c.birthYearMin,
+                                c.birthYearMax,
+                              )}
+                            />
+                          ) : null}
                           {c.minTeamsToStart != null ? (
                             <CategoryDetailRow
                               label="Equipos mín."
                               value={String(c.minTeamsToStart)}
+                            />
+                          ) : null}
+                          {c.playersOnFieldPerTeam != null ? (
+                            <CategoryDetailRow
+                              label="Jug. en cancha por equipo"
+                              value={String(c.playersOnFieldPerTeam)}
+                            />
+                          ) : null}
+                          {c.firstHalfMinutes != null &&
+                          c.halftimeBreakMinutes != null &&
+                          c.secondHalfMinutes != null ? (
+                            <CategoryDetailRow
+                              label="Tiempos (min)"
+                              value={`${c.firstHalfMinutes} + ${c.halftimeBreakMinutes} + ${c.secondHalfMinutes}`}
                             />
                           ) : null}
                           <CategoryDetailRow label="Fecha de creación" value={formatDateEsShort(c.createdAt)} />

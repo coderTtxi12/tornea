@@ -21,6 +21,10 @@ export type NewLeagueCategoryBody = {
   /** `metadata.birthYearMax` — año más reciente permitido (límite superior). */
   birthYearMax: number | null;
   minTeamsToStart: number | null;
+  playersOnFieldPerTeam: number | null;
+  firstHalfMinutes: number;
+  halftimeBreakMinutes: number;
+  secondHalfMinutes: number;
 };
 
 export type CreatedLeagueCategoryRow = {
@@ -155,6 +159,12 @@ export async function createLeagueCategoryWithIdempotency(
     if (fields.minTeamsToStart != null) {
       metadata.minTeamsToStart = fields.minTeamsToStart;
     }
+    if (fields.playersOnFieldPerTeam != null) {
+      metadata.playersOnFieldPerTeam = fields.playersOnFieldPerTeam;
+    }
+    metadata.firstHalfMinutes = fields.firstHalfMinutes;
+    metadata.halftimeBreakMinutes = fields.halftimeBreakMinutes;
+    metadata.secondHalfMinutes = fields.secondHalfMinutes;
 
     const [created] = await tx
       .insert(leagueCategories)

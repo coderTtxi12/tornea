@@ -94,6 +94,59 @@ function isoToBrowserLocalDateTime(iso: string): {
   return { dateStr, hour12, minute, meridiem };
 }
 
+function parseOptionalPositiveInt(raw: string): number | null | "invalid" {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < 1) return "invalid";
+  return n;
+}
+
+function parseRequiredDurationMinutes(
+  raw: string,
+  opts: { min: number; max: number },
+): number | "empty" | "invalid" {
+  const t = raw.trim();
+  if (!t) return "empty";
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < opts.min || n > opts.max) return "invalid";
+  return n;
+}
+
+type MatchDurationKey = "firstHalfMinutes" | "halftimeBreakMinutes" | "secondHalfMinutes";
+
+function durationStrFromCategory(
+  league: MyLeaguesApiItem | null,
+  categoryId: string,
+  key: MatchDurationKey,
+): string {
+  if (!categoryId || !league) return "";
+  const cat = league.categories.find((c) => c.id === categoryId);
+  const v = cat?.[key];
+  return v != null ? String(v) : "";
+}
+
+function durationStrForMatchForm(
+  league: MyLeaguesApiItem | null,
+  categoryId: string,
+  row: MyLeaguesMatchRow | null | undefined,
+  key: MatchDurationKey,
+): string {
+  if (row?.[key] != null) return String(row[key]);
+  return durationStrFromCategory(league, categoryId, key);
+}
+
+function playersOnFieldStrFromCategory(
+  league: MyLeaguesApiItem | null,
+  categoryId: string,
+  matchOverride?: number | null,
+): string {
+  if (matchOverride != null) return String(matchOverride);
+  if (!categoryId || !league) return "";
+  const cat = league.categories.find((c) => c.id === categoryId);
+  return cat?.playersOnFieldPerTeam != null ? String(cat.playersOnFieldPerTeam) : "";
+}
+
 function roundStateFromStoredLabel(
   label: string | null,
 ): { preset: string; custom: string } {
@@ -132,6 +185,15 @@ export function NewMatchForm({
   });
 
   const [matchCategoryId, setMatchCategoryId] = useState(() => editRow?.leagueCategoryId ?? "");
+  const [playersOnFieldStr, setPlayersOnFieldStr] = useState(() => {
+    if (!editRow) return "";
+    const L = leagues.find((l) => l.id === editRow.leagueId) ?? null;
+    return playersOnFieldStrFromCategory(
+      L,
+      editRow.leagueCategoryId ?? "",
+      editRow.playersOnFieldPerTeam,
+    );
+  });
   const [seasonTeams, setSeasonTeams] = useState<SeasonTeamRow[]>([]);
   const [teamsLoad, setTeamsLoad] = useState<"idle" | "loading" | "error">("idle");
   const [teamsError, setTeamsError] = useState<string | null>(null);
@@ -162,6 +224,34 @@ export function NewMatchForm({
   const [leagueRefereeId, setLeagueRefereeId] = useState(
     () => editRow?.leagueRefereeId ?? "",
   );
+
+  const [firstHalfStr, setFirstHalfStr] = useState(() => {
+    const L = editRow ? (leagues.find((l) => l.id === editRow.leagueId) ?? null) : null;
+    return durationStrForMatchForm(
+      L,
+      editRow?.leagueCategoryId ?? "",
+      editRow,
+      "firstHalfMinutes",
+    );
+  });
+  const [halftimeStr, setHalftimeStr] = useState(() => {
+    const L = editRow ? (leagues.find((l) => l.id === editRow.leagueId) ?? null) : null;
+    return durationStrForMatchForm(
+      L,
+      editRow?.leagueCategoryId ?? "",
+      editRow,
+      "halftimeBreakMinutes",
+    );
+  });
+  const [secondHalfStr, setSecondHalfStr] = useState(() => {
+    const L = editRow ? (leagues.find((l) => l.id === editRow.leagueId) ?? null) : null;
+    return durationStrForMatchForm(
+      L,
+      editRow?.leagueCategoryId ?? "",
+      editRow,
+      "secondHalfMinutes",
+    );
+  });
 
   const refereesForLeague = useMemo(() => {
     if (!leagueId) return [];
@@ -245,6 +335,10 @@ export function NewMatchForm({
     const L = leagues.find((l) => l.id === nextLeagueId) ?? null;
     setSeasonId(defaultSeasonIdForLeague(L));
     setMatchCategoryId("");
+    setPlayersOnFieldStr("");
+    setFirstHalfStr("");
+    setHalftimeStr("");
+    setSecondHalfStr("");
     setHomeTeamId("");
     setAwayTeamId("");
     setRoundPreset("");
@@ -329,6 +423,51 @@ export function NewMatchForm({
       roundLabel = roundPreset.trim();
     }
 
+    let playersOnFieldPerTeam: number | null = null;
+    if (matchCategoryId.trim()) {
+      const playersOnField = parseOptionalPositiveInt(playersOnFieldStr);
+      if (playersOnField === "invalid") {
+        setFieldErrors({
+          playersOnFieldPerTeam: "Indica un entero entre 1 y 99 o dejá vacío.",
+        });
+        return;
+      }
+      playersOnFieldPerTeam = playersOnField;
+    }
+
+    let firstHalfMinutes: number | null = null;
+    let halftimeBreakMinutes: number | null = null;
+    let secondHalfMinutes: number | null = null;
+
+    if (matchCategoryId.trim()) {
+      const nextDurationErrors: Record<string, string> = {};
+      const firstHalf = parseRequiredDurationMinutes(firstHalfStr, { min: 1, max: 120 });
+      const halftime = parseRequiredDurationMinutes(halftimeStr, { min: 0, max: 60 });
+      const secondHalf = parseRequiredDurationMinutes(secondHalfStr, { min: 1, max: 120 });
+      if (firstHalf === "empty") {
+        nextDurationErrors.firstHalfMinutes = "Indica los minutos del primer tiempo.";
+      } else if (firstHalf === "invalid") {
+        nextDurationErrors.firstHalfMinutes = "Usá un entero entre 1 y 120.";
+      }
+      if (halftime === "empty") {
+        nextDurationErrors.halftimeBreakMinutes = "Indica los minutos de descanso.";
+      } else if (halftime === "invalid") {
+        nextDurationErrors.halftimeBreakMinutes = "Usá un entero entre 0 y 60.";
+      }
+      if (secondHalf === "empty") {
+        nextDurationErrors.secondHalfMinutes = "Indica los minutos del segundo tiempo.";
+      } else if (secondHalf === "invalid") {
+        nextDurationErrors.secondHalfMinutes = "Usá un entero entre 1 y 120.";
+      }
+      if (Object.keys(nextDurationErrors).length > 0) {
+        setFieldErrors(nextDurationErrors);
+        return;
+      }
+      firstHalfMinutes = firstHalf as number;
+      halftimeBreakMinutes = halftime as number;
+      secondHalfMinutes = secondHalf as number;
+    }
+
     const body = {
       seasonId,
       homeTeamId,
@@ -339,6 +478,10 @@ export function NewMatchForm({
       leagueCategoryId: matchCategoryId.trim() ? matchCategoryId.trim() : null,
       notes: notes.trim() ? notes.trim() : null,
       leagueRefereeId: leagueRefereeId.trim() ? leagueRefereeId.trim() : null,
+      playersOnFieldPerTeam,
+      firstHalfMinutes,
+      halftimeBreakMinutes,
+      secondHalfMinutes,
     };
 
     const parsed = newMatchJsonSchema.safeParse(body);
@@ -603,9 +746,28 @@ export function NewMatchForm({
               <select
                 value={matchCategoryId}
                 onChange={(e) => {
-                  setMatchCategoryId(e.target.value);
+                  const next = e.target.value;
+                  setMatchCategoryId(next);
                   setHomeTeamId("");
                   setAwayTeamId("");
+                  setPlayersOnFieldStr(
+                    playersOnFieldStrFromCategory(selectedLeague, next),
+                  );
+                  if (next) {
+                    setFirstHalfStr(
+                      durationStrFromCategory(selectedLeague, next, "firstHalfMinutes"),
+                    );
+                    setHalftimeStr(
+                      durationStrFromCategory(selectedLeague, next, "halftimeBreakMinutes"),
+                    );
+                    setSecondHalfStr(
+                      durationStrFromCategory(selectedLeague, next, "secondHalfMinutes"),
+                    );
+                  } else {
+                    setFirstHalfStr("");
+                    setHalftimeStr("");
+                    setSecondHalfStr("");
+                  }
                 }}
                 disabled={noSeasons}
                 className="border-border bg-surface-code/40 focus-visible:ring-brand-teal/50 hover:border-brand-teal/40 w-full cursor-pointer appearance-none rounded-brand-md border px-3 py-2 pr-10 text-sm outline-none transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -638,6 +800,38 @@ export function NewMatchForm({
               Si eliges categoría, solo verás equipos inscritos en esa categoría en la temporada; el
               partido guarda <code className="text-foreground-muted">league_category_id</code>.
             </span>
+          </label>
+        ) : null}
+
+        {matchCategoryId ? (
+          <label className="block">
+            <span className="text-foreground-muted text-xs font-medium">
+              Jugadores en cancha por equipo
+            </span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={99}
+              name="playersOnFieldPerTeam"
+              value={playersOnFieldStr}
+              onChange={(e) => setPlayersOnFieldStr(e.target.value)}
+              disabled={noSeasons}
+              placeholder="Vacío = sin valor en este partido"
+              className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-invalid={!!fieldErrors.playersOnFieldPerTeam}
+            />
+            {fieldErrors.playersOnFieldPerTeam ? (
+              <span className="text-brand-purple mt-1 block text-xs">
+                {fieldErrors.playersOnFieldPerTeam}
+              </span>
+            ) : (
+              <span className="text-foreground-subtle mt-1 block text-[10px] leading-relaxed">
+                Se precarga desde la categoría si existe. Lo que guardes aquí va solo a este partido (
+                <code className="text-foreground-muted">matches.report</code>), sin cambiar la
+                categoría.
+              </span>
+            )}
           </label>
         ) : null}
 
@@ -834,6 +1028,89 @@ export function NewMatchForm({
             ) : null}
           </label>
         </div>
+
+        {matchCategoryId ? (
+        <fieldset className="border-border rounded-brand-md border px-3 py-3">
+          <legend className="text-foreground-muted px-1 text-xs font-medium">
+            Duración de este partido <span className="text-brand-teal">*</span>
+          </legend>
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="text-foreground-muted text-xs font-medium">
+                Primer tiempo (min) <span className="text-brand-teal">*</span>
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={120}
+                name="firstHalfMinutes"
+                value={firstHalfStr}
+                onChange={(e) => setFirstHalfStr(e.target.value)}
+                required
+                disabled={noSeasons}
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-invalid={!!fieldErrors.firstHalfMinutes}
+              />
+              {fieldErrors.firstHalfMinutes ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.firstHalfMinutes}
+                </span>
+              ) : null}
+            </label>
+            <label className="block">
+              <span className="text-foreground-muted text-xs font-medium">
+                Medio tiempo / descanso (min) <span className="text-brand-teal">*</span>
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={60}
+                name="halftimeBreakMinutes"
+                value={halftimeStr}
+                onChange={(e) => setHalftimeStr(e.target.value)}
+                required
+                disabled={noSeasons}
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-invalid={!!fieldErrors.halftimeBreakMinutes}
+              />
+              {fieldErrors.halftimeBreakMinutes ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.halftimeBreakMinutes}
+                </span>
+              ) : null}
+            </label>
+            <label className="block">
+              <span className="text-foreground-muted text-xs font-medium">
+                Segundo tiempo (min) <span className="text-brand-teal">*</span>
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={120}
+                name="secondHalfMinutes"
+                value={secondHalfStr}
+                onChange={(e) => setSecondHalfStr(e.target.value)}
+                required
+                disabled={noSeasons}
+                className="border-border bg-surface-code/40 mt-1 w-full rounded-brand-md border px-3 py-2 text-sm tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-teal/50 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-invalid={!!fieldErrors.secondHalfMinutes}
+              />
+              {fieldErrors.secondHalfMinutes ? (
+                <span className="text-brand-purple mt-1 block text-xs">
+                  {fieldErrors.secondHalfMinutes}
+                </span>
+              ) : null}
+            </label>
+          </div>
+          <p className="text-foreground-subtle mt-2 text-[10px] leading-relaxed">
+            Precargado desde la categoría; si lo cambiás solo afecta este partido (
+            <code className="text-foreground-muted">matches.report</code>).
+          </p>
+        </fieldset>
+        ) : null}
 
         <div className="block">
           <span className="text-foreground-muted text-xs font-medium">Fecha y hora</span>

@@ -98,6 +98,10 @@ export async function PATCH(
       roundLabel: d.roundLabel ?? null,
       notes: d.notes ?? null,
       leagueRefereeId: d.leagueRefereeId ?? null,
+      playersOnFieldPerTeam: d.playersOnFieldPerTeam ?? null,
+      firstHalfMinutes: d.firstHalfMinutes ?? null,
+      halftimeBreakMinutes: d.halftimeBreakMinutes ?? null,
+      secondHalfMinutes: d.secondHalfMinutes ?? null,
     });
 
     if (!result.ok) {
