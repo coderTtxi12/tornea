@@ -130,3 +130,25 @@ export function countStarters(
 ): number {
   return lineups.filter((l) => l.teamId === teamId && l.slot === "starter").length;
 }
+
+type RosterRef = { teamId: string; playerId: string };
+
+/** Añade `bench` para cada jugador del plantel que no es titular en `entries`. */
+export function expandLineupEntriesWithAutoBench<
+  T extends { teamId: string; playerId: string; slot: LineupSlot },
+>(entries: readonly T[], roster: readonly RosterRef[]): T[] {
+  const result = [...entries];
+  const keys = new Set(entries.map((e) => `${e.teamId}:${e.playerId}`));
+  const starterKeys = new Set(
+    entries.filter((e) => e.slot === "starter").map((e) => `${e.teamId}:${e.playerId}`),
+  );
+
+  for (const { teamId, playerId } of roster) {
+    const key = `${teamId}:${playerId}`;
+    if (starterKeys.has(key) || keys.has(key)) continue;
+    result.push({ teamId, playerId, slot: "bench" } as T);
+    keys.add(key);
+  }
+
+  return result;
+}

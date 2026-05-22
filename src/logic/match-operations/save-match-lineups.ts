@@ -8,6 +8,7 @@ import { readMatchReportMetadata } from "@/logic/leagues/match-report-metadata";
 import { loadMatchForOperations } from "./match-operations-access";
 import {
   countStarters,
+  expandLineupEntriesWithAutoBench,
   lineupPlayerIdsForTeam,
 } from "./match-player-state";
 import {
@@ -99,7 +100,9 @@ export async function saveMatchLineups(
     }
   }
 
-  const lineupsForCount = input.entries.map((e) => ({
+  const entries = expandLineupEntriesWithAutoBench(input.entries, rosterRows);
+
+  const lineupsForCount = entries.map((e) => ({
     teamId: e.teamId,
     playerId: e.playerId,
     slot: e.slot,
@@ -125,9 +128,9 @@ export async function saveMatchLineups(
 
   await db.transaction(async (tx) => {
     await tx.delete(matchLineups).where(eq(matchLineups.matchId, input.matchId));
-    if (input.entries.length > 0) {
+    if (entries.length > 0) {
       await tx.insert(matchLineups).values(
-        input.entries.map((e, i) => ({
+        entries.map((e, i) => ({
           matchId: input.matchId,
           teamId: e.teamId,
           playerId: e.playerId,

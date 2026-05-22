@@ -13,7 +13,7 @@ import type { MatchOperationsBundle } from "./match-operations-types";
 import { LivePanelShell, LiveSectionBody, LiveSectionHeader } from "./live-ui-primitives";
 import { MockBadge } from "../views/dashboard-view-primitives";
 
-type FeedItem = {
+export type IncidentFeedItem = {
   id: string;
   kind: string;
   minute: number | null;
@@ -44,8 +44,8 @@ function teamLabelForId(bundle: MatchOperationsBundle, teamId: string): string {
   return "Equipo";
 }
 
-export function buildIncidentFeedItems(bundle: MatchOperationsBundle): FeedItem[] {
-  const items: FeedItem[] = [];
+export function buildIncidentFeedItems(bundle: MatchOperationsBundle): IncidentFeedItem[] {
+  const items: IncidentFeedItem[] = [];
 
   for (const g of bundle.goals) {
     items.push({
@@ -150,6 +150,67 @@ const ICON_TONES: Record<string, string> = {
   clock: "bg-brand-teal/15 text-brand-teal",
 };
 
+export function IncidentFeedList({
+  items,
+  className = "max-h-80 space-y-3 overflow-y-auto pr-1",
+  emptyMessage = "Sin incidencias registradas.",
+}: {
+  items: IncidentFeedItem[];
+  className?: string;
+  emptyMessage?: string;
+}) {
+  if (items.length === 0) {
+    return <p className="text-foreground-muted text-sm">{emptyMessage}</p>;
+  }
+
+  return (
+    <ul className={className}>
+      {items.map((item) => {
+        const Icon = ICONS[item.kind as keyof typeof ICONS] ?? CircleDot;
+        const tone = ICON_TONES[item.kind] ?? ICON_TONES.foul;
+        const isGoal = item.kind === "goal";
+        return (
+          <li
+            key={item.id}
+            className="border-border flex min-h-[4.5rem] cursor-default items-center gap-4 rounded-brand-lg border bg-background-muted/20 px-4 py-4 text-sm transition-colors duration-200"
+          >
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full ${tone}`}
+            >
+              {isGoal ? (
+                <span className="text-base leading-none" aria-hidden>
+                  ⚽
+                </span>
+              ) : (
+                <Icon className="size-4" aria-hidden />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="font-semibold">{item.label}</span>
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-brand-teal truncate text-xs font-semibold">
+                  {item.teamLabel}
+                </span>
+                {item.detail ? (
+                  <span className="text-foreground-muted truncate text-xs">
+                    {item.detail}
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-foreground-subtle mt-0.5 text-[10px] font-medium">
+                {formatEventTime(item.createdAt)}
+              </p>
+            </div>
+            {item.minute != null ? (
+              <MockBadge tone="lime">{item.minute}′</MockBadge>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle }) {
   const items = buildIncidentFeedItems(bundle);
 
@@ -165,54 +226,7 @@ export function IncidentEventFeed({ bundle }: { bundle: MatchOperationsBundle })
         }
       />
       <LiveSectionBody>
-        {items.length === 0 ? (
-          <p className="text-foreground-muted text-sm">Sin incidencias registradas.</p>
-        ) : (
-          <ul className="max-h-80 space-y-3 overflow-y-auto pr-1">
-            {items.map((item) => {
-              const Icon = ICONS[item.kind as keyof typeof ICONS] ?? CircleDot;
-              const tone = ICON_TONES[item.kind] ?? ICON_TONES.foul;
-              const isGoal = item.kind === "goal";
-              return (
-                <li
-                  key={item.id}
-                  className="border-border flex min-h-[4.5rem] cursor-default items-center gap-4 rounded-brand-lg border bg-background-muted/20 px-4 py-4 text-sm transition-colors duration-200"
-                >
-                  <span
-                    className={`flex size-10 shrink-0 items-center justify-center rounded-full ${tone}`}
-                  >
-                    {isGoal ? (
-                      <span className="text-base leading-none" aria-hidden>
-                        ⚽
-                      </span>
-                    ) : (
-                      <Icon className="size-4" aria-hidden />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <span className="font-semibold">{item.label}</span>
-                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-brand-teal truncate text-xs font-semibold">
-                        {item.teamLabel}
-                      </span>
-                      {item.detail ? (
-                        <span className="text-foreground-muted truncate text-xs">
-                          {item.detail}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-foreground-subtle mt-0.5 text-[10px] font-medium">
-                      {formatEventTime(item.createdAt)}
-                    </p>
-                  </div>
-                  {item.minute != null ? (
-                    <MockBadge tone="lime">{item.minute}′</MockBadge>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <IncidentFeedList items={items} />
       </LiveSectionBody>
     </LivePanelShell>
   );

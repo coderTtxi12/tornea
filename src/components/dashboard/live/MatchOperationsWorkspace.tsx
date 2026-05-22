@@ -43,6 +43,7 @@ import {
 import { validateBirthDateIso } from "@/logic/players/birth-date-validation";
 import { matchMinuteFromElapsedSeconds } from "@/logic/match-operations/elapsed-minute";
 import { periodEndActionLabel } from "@/logic/match-operations/match-clock-events";
+import { expandLineupEntriesWithAutoBench } from "@/logic/match-operations/match-player-state";
 
 import {
   clockElapsedTone,
@@ -529,7 +530,8 @@ function LineupsPanel({
               Plantilla
             </CardTitle>
             <CardDescription className="mt-1.5">
-              Elige exactamente {max} titulares por equipo. Los suplentes son opcionales para cambios.
+              Elige exactamente {max} titulares por equipo. El resto del plantel se registrará
+              automáticamente como suplentes.
             </CardDescription>
           </div>
           <Button
@@ -914,13 +916,16 @@ function LineupsPanel({
           className="cursor-pointer"
           disabled={!canSave}
           onClick={() => {
-            const entries = Object.entries(selected)
+            const picked = Object.entries(selected)
               .filter(([, slot]) => slot === "starter" || slot === "bench")
               .map(([key, slot]) => {
                 const [teamId, playerId] = key.split(":");
                 return { teamId, playerId, slot: slot as "starter" | "bench" };
               });
-            void onSave(entries);
+            const roster = Object.entries(bundle.rosterByTeam).flatMap(([teamId, players]) =>
+              players.map((p) => ({ teamId, playerId: p.playerId })),
+            );
+            void onSave(expandLineupEntriesWithAutoBench(picked, roster));
           }}
         >
           Validar plantilla y continuar
@@ -1178,6 +1183,7 @@ function LivePanel({
     clockPeriod === "second_half" &&
     periodLimitSeconds != null &&
     isNearPeriodLimit(localElapsed, periodLimitSeconds);
+  const showLiveControls = clockPeriod !== "ended";
 
   const roster = bundle.rosterByTeam[teamId] ?? [];
   const onFieldIds =
@@ -1258,6 +1264,7 @@ function LivePanel({
 
   return (
     <div className="space-y-4">
+      {showLiveControls ? (
       <LiveCard
         className={`sticky top-[57px] z-10 sm:static ${clockBusyAction ? "cursor-wait" : ""}`}
       >
@@ -1309,9 +1316,11 @@ function LivePanel({
           </div>
         </div>
         {secondHalfAddedSeconds > 0 ? (
-          <p className="text-foreground-muted border-t border-border px-3 pb-2 text-center text-xs">
-            +{Math.round(secondHalfAddedSeconds / 60)} min de tiempo extra añadidos
-          </p>
+          <div className="flex w-full justify-center border-t border-border px-3 py-2">
+            <p className="text-foreground-muted text-center text-xs">
+              +{Math.round(secondHalfAddedSeconds / 60)} min de tiempo extra añadidos
+            </p>
+          </div>
         ) : null}
         {showStoppageOptions ? (
           <div className="space-y-2 border-t border-border px-3 pb-3 pt-2">
@@ -1404,7 +1413,9 @@ function LivePanel({
           </Button>
         </div>
       </LiveCard>
+      ) : null}
 
+      {showLiveControls ? (
       <LiveCard className={incidentBusy ? "cursor-wait" : undefined}>
         <CardHeader className="px-4 py-4 sm:px-5">
           <CardTitle className="flex items-center gap-2 text-base">
@@ -1679,6 +1690,7 @@ function LivePanel({
           </div>
         </CardContent>
       </LiveCard>
+      ) : null}
 
       {bundle.foulCounts.home >= 5 || bundle.foulCounts.away >= 5 ? (
         <LiveAlert tone="warn">

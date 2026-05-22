@@ -5,7 +5,7 @@ import { CalendarClock, ListOrdered, Play, Radio } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { buildIncidentFeedItems } from "./IncidentEventFeed";
+import { IncidentFeedList, buildIncidentFeedItems } from "./IncidentEventFeed";
 import { formatMatchSchedule } from "./live-match-format";
 import type { LiveMatchListItem, MatchOperationsBundle } from "./match-operations-types";
 import { MockBadge, floatCard } from "../views/dashboard-view-primitives";
@@ -103,7 +103,7 @@ export function LiveNowOverview({
       ) : visibleBundles.length > 0 ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {visibleBundles.map((bundle) => {
-            const feedItems = buildIncidentFeedItems(bundle).slice(0, 4);
+            const feedItems = buildIncidentFeedItems(bundle);
             const score = `${bundle.liveScore.home}-${bundle.liveScore.away}`;
             const schedule = formatMatchSchedule(bundle.match.scheduledAt);
 
@@ -130,34 +130,22 @@ export function LiveNowOverview({
                 </div>
 
                 <div className="mt-4 border-t border-border pt-4">
-                  <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-foreground-muted">
-                    <ListOrdered className="size-3.5" aria-hidden />
-                    Incidencias
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-foreground-muted">
+                      <ListOrdered className="size-3.5" aria-hidden />
+                      Incidencias
+                    </div>
+                    {feedItems.length > 0 ? (
+                      <span className="text-foreground-subtle text-[10px] font-medium">
+                        {feedItems.length} registrada{feedItems.length === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
                   </div>
-                  {feedItems.length > 0 ? (
-                    <ul className="space-y-2">
-                      {feedItems.map((item) => (
-                        <li
-                          key={item.id}
-                          className="flex items-center justify-between gap-3 rounded-brand-md bg-background-muted/30 px-3 py-2 text-sm"
-                        >
-                          <span className="min-w-0 truncate">
-                            <span className="font-medium">{item.label}</span>
-                            {item.detail ? (
-                              <span className="text-foreground-muted"> · {item.detail}</span>
-                            ) : null}
-                          </span>
-                          {item.minute != null ? (
-                            <MockBadge tone="lime">{item.minute}&apos;</MockBadge>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-foreground-muted rounded-brand-md border border-dashed border-border px-3 py-4 text-sm">
-                      Sin incidencias registradas todavía.
-                    </p>
-                  )}
+                  <IncidentFeedList
+                    items={feedItems}
+                    className="max-h-72 space-y-3 overflow-y-auto pr-1"
+                    emptyMessage="Sin incidencias registradas todavía."
+                  />
                 </div>
               </article>
             );
