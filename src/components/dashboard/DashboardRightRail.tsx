@@ -67,7 +67,7 @@ function matchStatusLabel(status: string): string {
   const m: Record<string, string> = {
     scheduled: "Prog.",
     live: "En vivo",
-    finished: "Final",
+    finished: "Terminado",
     postponed: "Aplaz.",
     cancelled: "Canc.",
     walkover: "WO",

@@ -66,6 +66,34 @@ export function LiveSectionBody({ children }: { children: ReactNode }) {
   return <div className="p-4 sm:p-5">{children}</div>;
 }
 
+/** Scrim + spinner sobre una `LiveCard` (p. ej. guardar datos, reloj, incidencia). */
+export function LiveCardBusyOverlay({
+  label,
+  rounded = "lg",
+}: {
+  label: string;
+  rounded?: "lg" | "bottom";
+}) {
+  const roundedClass =
+    rounded === "bottom" ? "rounded-b-brand-lg" : "rounded-brand-lg";
+  return (
+    <div
+      className={`absolute inset-0 z-20 flex cursor-wait items-center justify-center bg-background/72 backdrop-blur-[2px] ${roundedClass}`}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div className="border-border bg-background/95 flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-bold text-foreground shadow-lg">
+        <span
+          className="border-brand-teal size-4 animate-spin rounded-full border-2 border-t-transparent"
+          aria-hidden
+        />
+        {label}
+      </div>
+    </div>
+  );
+}
+
 const STEPS = [
   { key: "setup", label: "Datos" },
   { key: "lineups", label: "Plantilla" },

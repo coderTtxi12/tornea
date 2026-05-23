@@ -7,6 +7,8 @@ import {
   MatchesFilterableTable,
   type MatchesFilterableTableHandle,
 } from "@/components/dashboard/tables/matches-filterable-table";
+import { MatchRecapFullscreen } from "@/components/dashboard/match-recap/MatchRecapFullscreen";
+
 import {
   DashboardViewHeader,
   MockActionButton,
@@ -33,6 +35,7 @@ export function DashboardFixtureView({
   const tableRef = useRef<MatchesFilterableTableHandle>(null);
   const [canClearTable, setCanClearTable] = useState(false);
   const [matchesState, setMatchesState] = useState<MatchesLoadState>({ status: "idle" });
+  const [recapMatch, setRecapMatch] = useState<MyLeaguesMatchRow | null>(null);
 
   useEffect(() => {
     if (!hasManagedLeagues) {
@@ -141,8 +144,13 @@ export function DashboardFixtureView({
           matchRows={rows}
           onHasActiveFiltersChange={setCanClearTable}
           onEditMatch={onOpenEditMatchDrawer}
+          onViewMatchRecap={setRecapMatch}
         />
       )}
+
+      {recapMatch ? (
+        <MatchRecapFullscreen row={recapMatch} onClose={() => setRecapMatch(null)} />
+      ) : null}
 
       {tableVisible ? (
         <div className="mt-3 flex justify-end">

@@ -17,6 +17,11 @@ function mapUpdateError(
       return { status: 403, message: "No autorizado" };
     case "match_not_found":
       return { status: 404, message: "Partido no encontrado" };
+    case "match_not_editable":
+      return {
+        status: 409,
+        message: "Este partido ya está terminado o resuelto por walkover y no se puede editar.",
+      };
     case "season_not_found":
       return { status: 404, message: "Temporada no encontrada" };
     case "same_team":

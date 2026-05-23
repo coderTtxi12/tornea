@@ -35,6 +35,7 @@ import { LiveFormField } from "./live-form-field";
 import {
   LiveAlert,
   LiveBirthDateField,
+  LiveCardBusyOverlay,
   LiveEmptyRoster,
   LiveMatchHeader,
   LivePanelShell,
@@ -134,6 +135,7 @@ export function MatchOperationsWorkspace({
   const { state, refreshing, post, put, reload } = useMatchOperations(leagueId, matchId);
   const [error, setError] = useState<string | null>(null);
   const [localElapsed, setLocalElapsed] = useState(0);
+  const [startBusy, setStartBusy] = useState(false);
 
   const bundle = state.status === "ready" ? state.bundle : null;
 
@@ -267,7 +269,10 @@ export function MatchOperationsWorkspace({
       ) : null}
 
       {operations.operationsPhase === "ready" ? (
-        <LiveCard className="overflow-hidden border-brand-lime/25">
+        <LiveCard
+          className={`relative overflow-hidden border-brand-lime/25 ${startBusy ? "cursor-wait" : ""}`}
+        >
+          {startBusy ? <LiveCardBusyOverlay label="Iniciando partido…" /> : null}
           <div className="bg-gradient-night px-6 py-10 text-center sm:px-8">
             <p className="text-brand-teal text-xs font-bold uppercase tracking-wider">
               Plantilla validada
@@ -280,10 +285,17 @@ export function MatchOperationsWorkspace({
               variant="energy"
               size="lg"
               className="mt-6 cursor-pointer"
+              disabled={startBusy}
               onClick={async () => {
+                if (startBusy) return;
+                setStartBusy(true);
                 setError(null);
-                const r = await post("start");
-                if (!r.ok) setError(r.error);
+                try {
+                  const r = await post("start");
+                  if (!r.ok) setError(r.error);
+                } finally {
+                  setStartBusy(false);
+                }
               }}
             >
               <Play className="size-4" />
@@ -359,9 +371,28 @@ function SetupPanel({
   const [fh, setFh] = useState(String(report.firstHalfMinutes ?? 45));
   const [ht, setHt] = useState(String(report.halftimeBreakMinutes ?? 15));
   const [sh, setSh] = useState(String(report.secondHalfMinutes ?? 45));
+  const [validateBusy, setValidateBusy] = useState(false);
+
+  const handleValidate = async () => {
+    if (validateBusy) return;
+    setValidateBusy(true);
+    try {
+      await onValidate({
+        playersOnFieldPerTeam: Number(playersOnField),
+        firstHalfMinutes: Number(fh),
+        halftimeBreakMinutes: Number(ht),
+        secondHalfMinutes: Number(sh),
+      });
+    } finally {
+      setValidateBusy(false);
+    }
+  };
 
   return (
-    <LiveCard>
+    <LiveCard className={`relative ${validateBusy ? "cursor-wait" : ""}`}>
+      {validateBusy ? (
+        <LiveCardBusyOverlay label="Validando datos del partido…" />
+      ) : null}
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ClipboardCheck className="text-brand-teal size-4" aria-hidden />
@@ -417,7 +448,13 @@ function SetupPanel({
       </CardContent>
       <CardFooter className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
         {onEditMatch ? (
-          <Button type="button" variant="outline" className="cursor-pointer shadow-none" onClick={onEditMatch}>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer shadow-none"
+            disabled={validateBusy}
+            onClick={onEditMatch}
+          >
             Editar datos del encuentro
           </Button>
         ) : null}
@@ -425,14 +462,8 @@ function SetupPanel({
           type="button"
           variant="default"
           className="cursor-pointer shadow-none"
-          onClick={() =>
-            void onValidate({
-              playersOnFieldPerTeam: Number(playersOnField),
-              firstHalfMinutes: Number(fh),
-              halftimeBreakMinutes: Number(ht),
-              secondHalfMinutes: Number(sh),
-            })
-          }
+          disabled={validateBusy}
+          onClick={() => void handleValidate()}
         >
           Validar y continuar
         </Button>
@@ -519,9 +550,30 @@ function LineupsPanel({
       .filter(([key, slot]) => key.startsWith(`${teamId}:`) && slot === "bench")
       .map(([key]) => key.split(":")[1]);
   const canSave = teams.every((team) => starterCount(team.id) === max);
+  const [saveBusy, setSaveBusy] = useState(false);
+
+  const handleSaveLineup = async () => {
+    if (saveBusy || !canSave) return;
+    setSaveBusy(true);
+    try {
+      const picked = Object.entries(selected)
+        .filter(([, slot]) => slot === "starter" || slot === "bench")
+        .map(([key, slot]) => {
+          const [teamId, playerId] = key.split(":");
+          return { teamId, playerId, slot: slot as "starter" | "bench" };
+        });
+      const roster = Object.entries(bundle.rosterByTeam).flatMap(([teamId, players]) =>
+        players.map((p) => ({ teamId, playerId: p.playerId })),
+      );
+      await onSave(expandLineupEntriesWithAutoBench(picked, roster));
+    } finally {
+      setSaveBusy(false);
+    }
+  };
 
   return (
-    <LiveCard>
+    <LiveCard className={`relative ${saveBusy ? "cursor-wait" : ""}`}>
+      {saveBusy ? <LiveCardBusyOverlay label="Validando plantilla…" /> : null}
       <CardHeader className="gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
@@ -538,6 +590,7 @@ function LineupsPanel({
             type="button"
             variant="outline"
             className="shrink-0 self-start shadow-none"
+            disabled={saveBusy}
             onClick={() => setExpressSheetOpen(true)}
           >
             <UserPlus className="size-4" aria-hidden />
@@ -729,28 +782,26 @@ function LineupsPanel({
                               : "border-dashed border-border bg-background/40 text-foreground-muted"
                           }`}
                         >
-                          <span className="min-w-0 truncate">
-                            <span className="text-brand-teal mr-2 font-mono text-xs font-bold tabular-nums">
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="text-brand-teal shrink-0 font-mono text-xs font-bold tabular-nums">
                               {index + 1}
                             </span>
                             {player ? (
                               <>
                                 {player.shirtNumber != null ? (
-                                  <span className="text-brand-teal mr-1.5 font-bold tabular-nums">
+                                  <span className="text-brand-teal shrink-0 font-bold tabular-nums">
                                     {player.shirtNumber}
                                   </span>
                                 ) : null}
-                                <span className="inline-flex min-w-0 items-center gap-2 align-middle">
-                                  <PlayerAvatar
-                                    name={player.playerName}
-                                    src={player.profileImageUrl}
-                                    size="sm"
-                                  />
-                                  <span className="truncate">{player.playerName}</span>
-                                </span>
+                                <PlayerAvatar
+                                  name={player.playerName}
+                                  src={player.profileImageUrl}
+                                  size="sm"
+                                />
+                                <span className="min-w-0 truncate">{player.playerName}</span>
                               </>
                             ) : (
-                              "Cupo libre"
+                              <span className="text-foreground-muted truncate">Cupo libre</span>
                             )}
                           </span>
                           {player ? (
@@ -914,19 +965,8 @@ function LineupsPanel({
           type="button"
           variant="default"
           className="cursor-pointer"
-          disabled={!canSave}
-          onClick={() => {
-            const picked = Object.entries(selected)
-              .filter(([, slot]) => slot === "starter" || slot === "bench")
-              .map(([key, slot]) => {
-                const [teamId, playerId] = key.split(":");
-                return { teamId, playerId, slot: slot as "starter" | "bench" };
-              });
-            const roster = Object.entries(bundle.rosterByTeam).flatMap(([teamId, players]) =>
-              players.map((p) => ({ teamId, playerId: p.playerId })),
-            );
-            void onSave(expandLineupEntriesWithAutoBench(picked, roster));
-          }}
+          disabled={!canSave || saveBusy}
+          onClick={() => void handleSaveLineup()}
         >
           Validar plantilla y continuar
         </Button>
@@ -1268,17 +1308,7 @@ function LivePanel({
       <LiveCard
         className={`sticky top-[57px] z-10 sm:static ${clockBusyAction ? "cursor-wait" : ""}`}
       >
-        {clockBusyLabel ? (
-          <div className="absolute inset-0 z-20 flex cursor-wait items-center justify-center rounded-brand-lg bg-background/72 backdrop-blur-[2px]">
-            <div className="border-border bg-background/95 flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-bold text-foreground shadow-lg">
-              <span
-                className="border-brand-teal size-4 animate-spin rounded-full border-2 border-t-transparent"
-                aria-hidden
-              />
-              {clockBusyLabel}
-            </div>
-          </div>
-        ) : null}
+        {clockBusyLabel ? <LiveCardBusyOverlay label={clockBusyLabel} /> : null}
         <div className="flex items-center justify-between gap-3 p-3 sm:p-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="bg-brand-teal/10 text-brand-teal flex size-9 shrink-0 items-center justify-center rounded-full">
@@ -1425,15 +1455,7 @@ function LivePanel({
         </CardHeader>
         <CardContent className="relative space-y-4 px-4 pb-4 sm:px-5 sm:pb-5">
           {incidentBusy ? (
-            <div className="absolute inset-0 z-20 flex cursor-wait items-center justify-center rounded-b-brand-lg bg-background/72 backdrop-blur-[2px]">
-              <div className="border-border bg-background/95 flex items-center gap-3 rounded-full border px-4 py-2 text-sm font-bold text-foreground shadow-lg">
-                <span
-                  className="border-brand-teal size-4 animate-spin rounded-full border-2 border-t-transparent"
-                  aria-hidden
-                />
-                Registrando evento...
-              </div>
-            </div>
+            <LiveCardBusyOverlay label="Registrando evento…" rounded="bottom" />
           ) : null}
 
           {successMessage ? (

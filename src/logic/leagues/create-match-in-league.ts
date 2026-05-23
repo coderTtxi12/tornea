@@ -12,6 +12,8 @@ import {
   venues,
 } from "@/db/schema";
 
+import { isMatchEditable } from "@/logic/matches/match-is-editable";
+
 import { userCanManageLeague } from "./league-dashboard-admin";
 import { readLeagueCategoryMetadata } from "./league-category-metadata";
 import {
@@ -336,7 +338,8 @@ export type UpdateMatchInLeagueResult =
         | MatchScheduleCoreError
         | "forbidden"
         | "same_team"
-        | "match_not_found";
+        | "match_not_found"
+        | "match_not_editable";
     };
 
 /**
@@ -359,6 +362,7 @@ export async function updateMatchInLeague(
   const [existing] = await db
     .select({
       id: matches.id,
+      status: matches.status,
       report: matches.report,
     })
     .from(matches)
@@ -368,6 +372,10 @@ export async function updateMatchInLeague(
 
   if (!existing) {
     return { ok: false, reason: "match_not_found" };
+  }
+
+  if (!isMatchEditable(existing.status)) {
+    return { ok: false, reason: "match_not_editable" };
   }
 
   const core = await resolveMatchScheduleCore(db, {

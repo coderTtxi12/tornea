@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { MyLeaguesMatchRow } from "@/components/dashboard/leagues/my-leagues-state";
+import { isMatchEditable } from "@/logic/matches/match-is-editable";
 
 import {
   INITIAL_DRAWER_FORM_KEYS,
@@ -113,6 +114,7 @@ export function useDashboardDrawer(): {
 
   const openEditMatchDrawer = useCallback(
     (row: MyLeaguesMatchRow) => {
+      if (!isMatchEditable(row.status)) return;
       bump("match");
       setDrawer({ kind: "edit-match", initialRow: row });
     },

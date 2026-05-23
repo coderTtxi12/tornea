@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { isMatchEditable } from "@/logic/matches/match-is-editable";
+
 import { newMatchJsonSchema } from "./new-match-form-schema";
 import type {
   MyLeaguesApiItem,
@@ -169,6 +171,7 @@ export function NewMatchForm({
   editRow = null,
 }: NewMatchFormProps) {
   const isEdit = Boolean(editRow);
+  const matchLocked = isEdit && editRow != null && !isMatchEditable(editRow.status);
 
   const [leagueId, setLeagueId] = useState(
     () => editRow?.leagueId ?? (leagues.length === 1 ? leagues[0]!.id : ""),
@@ -381,6 +384,11 @@ export function NewMatchForm({
     setFieldErrors({});
     setSubmitError(null);
 
+    if (matchLocked) {
+      setSubmitError("Este partido ya está terminado o resuelto por walkover y no se puede editar.");
+      return;
+    }
+
     if (!isEdit && !leagueId.trim()) {
       setFieldErrors({ leagueId: "Elegí una liga." });
       return;
@@ -571,7 +579,15 @@ export function NewMatchForm({
         )}
       </p>
 
+      {matchLocked ? (
+        <div className="border-border bg-surface-code/30 text-foreground-muted mb-4 rounded-brand-md border px-3 py-2.5 text-sm leading-relaxed">
+          Este partido ya está terminado o resuelto por walkover. Los datos del fixture no se pueden
+          modificar desde aquí.
+        </div>
+      ) : null}
+
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        <fieldset disabled={matchLocked} className="flex min-w-0 flex-col gap-4 border-0 p-0">
         {submitError ? (
           <div className="border-border bg-brand-purple/15 text-brand-navy rounded-brand-md border px-3 py-2.5 text-sm">
             {submitError}
@@ -1242,6 +1258,8 @@ export function NewMatchForm({
           ) : null}
         </label>
 
+        </fieldset>
+
         <div className="border-border mt-2 flex flex-wrap gap-3 border-t pt-5">
           <button
             type="button"
@@ -1254,21 +1272,23 @@ export function NewMatchForm({
             }}
             disabled={submitting}
           >
-            Cancelar
+            {matchLocked ? "Cerrar" : "Cancelar"}
           </button>
-          <button
-            type="submit"
-            className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-            disabled={
-              submitting ||
-              noSeasons ||
-              teamsLoad === "loading" ||
-              visibleTeams.length < 2 ||
-              (!isEdit && !leagueId.trim())
-            }
-          >
-            {submitting ? "Guardando…" : isEdit ? "Guardar cambios" : "Programar partido"}
-          </button>
+          {!matchLocked ? (
+            <button
+              type="submit"
+              className="rounded-full bg-brand-blue px-6 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              disabled={
+                submitting ||
+                noSeasons ||
+                teamsLoad === "loading" ||
+                visibleTeams.length < 2 ||
+                (!isEdit && !leagueId.trim())
+              }
+            >
+              {submitting ? "Guardando…" : isEdit ? "Guardar cambios" : "Programar partido"}
+            </button>
+          ) : null}
         </div>
       </form>
     </div>

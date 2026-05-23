@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 
 import type { MyLeaguesMatchRow } from "@/components/dashboard/leagues/my-leagues-state";
 import { floatCard } from "@/components/dashboard/views/dashboard-view-primitives";
+import { isMatchEditable, isMatchRecapView } from "@/logic/matches/match-is-editable";
 
 export const MATCHES_FILTERABLE_TABLE_TRIGGER_ATTR = "data-matches-filterable-trigger";
 
@@ -25,7 +26,7 @@ function statusLabelMx(s: string): string {
   const map: Record<string, string> = {
     scheduled: "Programado",
     live: "En vivo",
-    finished: "Final",
+    finished: "Terminado",
     postponed: "Aplazado",
     cancelled: "Cancelado",
     walkover: "Walkover",
@@ -277,6 +278,8 @@ export type MatchesFilterableTableProps = {
   wrapperClassName?: string;
   onHasActiveFiltersChange?: (active: boolean) => void;
   onEditMatch: (row: MyLeaguesMatchRow) => void;
+  /** Partidos terminados / walkover: resumen a pantalla completa. */
+  onViewMatchRecap?: (row: MyLeaguesMatchRow) => void;
 };
 
 const UI_PAGE_SIZE = 20;
@@ -285,7 +288,13 @@ export const MatchesFilterableTable = forwardRef<
   MatchesFilterableTableHandle,
   MatchesFilterableTableProps
 >(function MatchesFilterableTable(
-  { matchRows: allMatchRows, wrapperClassName, onHasActiveFiltersChange, onEditMatch },
+  {
+    matchRows: allMatchRows,
+    wrapperClassName,
+    onHasActiveFiltersChange,
+    onEditMatch,
+    onViewMatchRecap,
+  },
   ref,
 ) {
   const [sort, setSort] = useState<MatchesTableSortState>(MATCHES_TABLE_DEFAULT_SORT);
@@ -720,19 +729,35 @@ export const MatchesFilterableTable = forwardRef<
                 </td>
               </tr>
             ) : (
-              visibleRows.map((m) => (
+              visibleRows.map((m) => {
+                const editable = isMatchEditable(m.status);
+                const recap = isMatchRecapView(m.status);
+                const interactive = editable || (recap && Boolean(onViewMatchRecap));
+                const handleActivate = () => {
+                  if (editable) onEditMatch(m);
+                  else if (recap && onViewMatchRecap) onViewMatchRecap(m);
+                };
+                return (
                 <tr
                   key={m.id}
-                  role="button"
-                  tabIndex={0}
-                  className="hover:bg-surface-code/20 cursor-pointer transition-colors"
-                  onClick={() => onEditMatch(m)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onEditMatch(m);
-                    }
-                  }}
+                  {...(interactive
+                    ? {
+                        role: "button" as const,
+                        tabIndex: 0,
+                        className:
+                          "hover:bg-surface-code/20 cursor-pointer transition-colors",
+                        onClick: handleActivate,
+                        onKeyDown: (e: React.KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleActivate();
+                          }
+                        },
+                        title: recap
+                          ? "Ver resumen del partido"
+                          : "Editar partido",
+                      }
+                    : { className: "" })}
                 >
                   <td className="px-4 py-2.5 align-middle">
                     <PhaseBadge m={m} />
@@ -763,7 +788,8 @@ export const MatchesFilterableTable = forwardRef<
                     <StatusBadge status={m.status} />
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>
